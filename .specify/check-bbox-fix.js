@@ -1,0 +1,10 @@
+const fs = require('fs');
+const path = require('path');
+const dir = 'C:/personal_projects/crisis-map/apps/web/dist/web/browser';
+const f = fs.readdirSync(dir).find((x) => /^main-.*\.js$/.test(x));
+const s = fs.readFileSync(path.join(dir, f), 'utf8');
+console.log('bundle size:', s.length);
+console.log('has tile():', s.includes('MAX_BBOX_AREA') || s.includes('0.04'));
+console.log('has Promise.all on bboxes:', s.includes('Promise.all'));
+console.log('has cache fallback:', s.includes('cache') && s.includes('loadBbox'));
+console.log('has getCached import usage:', s.includes('getCached'));

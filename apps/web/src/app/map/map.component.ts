@@ -93,11 +93,20 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         east: b.getEast(),
         north: b.getNorth(),
       });
+      let incidents: Incident[] = [];
       try {
-        const incidents = await this.layer.loadBbox(bbox, this.filters());
+        incidents = await this.layer.loadBbox(bbox, this.filters());
         this.render(incidents);
       } catch {
-        // offline - keep cached
+        // Server unreachable or query timed out: fall back to whatever
+        // we have in IndexedDB. This prevents the map from "emptying out"
+        // when the backend can't handle a large bbox in time.
+        try {
+          const cached = await this.layer.getCached();
+          this.render(cached);
+        } catch {
+          // No cache available either; keep whatever is currently shown.
+        }
       }
     }, 350);
   }
