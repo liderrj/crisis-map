@@ -40,7 +40,24 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Every plan MUST verify compliance with the principles in
+`.specify/memory/constitution.md`. The following gates are mandatory for the
+CrisisMap project:
+
+- **I. Mobile-First & Offline-First** — does every user-facing feature work
+  fully offline, and does the UI open directly to the map?
+- **II. Zero-Friction Identity** — does the feature avoid login, email, phone,
+  or any persistent account flow?
+- **III. Serverless & Low-Cost Hosting** — does the backend fit the API
+  Gateway / Lambda / DynamoDB model and deploy via `cdk deploy` (arkem
+  profile), while the frontend ships to Netlify (not S3/CloudFront)?
+- **IV. Community-Verified Truth, No AI** — does the feature avoid AI/ML and
+  rely on confirmations, votes, or community input for truthfulness?
+- **V. Performance & Bandwidth Discipline** — does the feature load only the
+  current map bounds, batch its requests, and keep payloads under the size
+  budget?
+
+Any violation MUST be recorded under "Complexity Tracking" with rationale.
 
 ## Project Structure
 
