@@ -1,0 +1,22 @@
+{
+  "name": "crisis-map",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "backend",
+    "backend/cdk"
+  ],
+  "scripts": {
+    "build:web": "npm run build --workspace apps/web",
+    "test:web": "npm test --workspace apps/web",
+    "build:backend": "npm run build --workspace backend",
+    "test:backend": "npm test --workspace backend",
+    "cdk": "npm run cdk --workspace backend/cdk",
+    "cdk:deploy": "npm run cdk deploy --workspace backend/cdk -- --profile arkem",
+    "cdk: synth": "npm run cdk synth --workspace backend/cdk -- --profile arkem"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
