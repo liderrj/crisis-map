@@ -20,6 +20,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'fab.resources': 'Recursos externos',
     'fab.terms': 'Términos y privacidad',
     'fab.language': 'Idioma',
+    'fab.contact': 'Contacto',
+    'fab.menu': 'Más',
 
     'report.title': 'Reportar incidente',
     'report.type': 'Tipo',
@@ -88,6 +90,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'contact.title': 'Contactar al equipo',
     'contact.subject': 'Asunto',
+
+    'menu.title': 'Más opciones',
     'contact.message': 'Mensaje',
     'contact.message.placeholder': 'Describe tu pregunta, reporte o problema...',
     'contact.send': 'Abrir en app de correo',
@@ -153,6 +157,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'fab.resources': 'External resources',
     'fab.terms': 'Terms & privacy',
     'fab.language': 'Language',
+    'fab.contact': 'Contact',
+    'fab.menu': 'More',
 
     'report.title': 'Report incident',
     'report.type': 'Type',
@@ -221,6 +227,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'contact.title': 'Contact the team',
     'contact.subject': 'Subject',
+
+    'menu.title': 'More options',
     'contact.message': 'Message',
     'contact.message.placeholder': 'Describe your question, report, or issue...',
     'contact.send': 'Open in mail app',
@@ -286,6 +294,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'fab.resources': 'Recursos externos',
     'fab.terms': 'Termos e privacidade',
     'fab.language': 'Idioma',
+    'fab.contact': 'Contato',
+    'fab.menu': 'Mais',
 
     'report.title': 'Reportar incidente',
     'report.type': 'Tipo',
@@ -354,6 +364,8 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'contact.title': 'Falar com a equipa',
     'contact.subject': 'Assunto',
+
+    'menu.title': 'Mais opções',
     'contact.message': 'Mensagem',
     'contact.message.placeholder': 'Descreva sua pergunta, reporte ou problema...',
     'contact.send': 'Abrir no app de e-mail',

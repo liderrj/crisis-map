@@ -1,4 +1,4 @@
-import { Component, signal, inject, ViewChild, computed } from '@angular/core';
+import { Component, signal, inject, ViewChild } from '@angular/core';
 import { MapComponent } from './map/map.component';
 import { MapControlsComponent } from './map/map-controls.component';
 import { FiltersComponent } from './filters/filters.component';
@@ -12,7 +12,7 @@ import { TermsComponent } from './terms/terms.component';
 import { ContactComponent } from './contact/contact.component';
 import { SyncEngineService } from './core/sync-engine.service';
 import { SeedService } from './core/seed.service';
-import { I18nService, type Locale } from './core/i18n.service';
+import { I18nService } from './core/i18n.service';
 import type { FilterState } from './map/incident-layer.service';
 
 @Component({
@@ -42,7 +42,7 @@ import type { FilterState } from './map/incident-layer.service';
       (resources)="showResources.set(true)"
       (terms)="showTerms.set(true)"
       (contact)="showContact.set(true)"
-      (toggleLang)="cycleLocale()"
+      (setLocale)="i18n.setLocale($event)"
     />
 
     @if (showReport()) {
@@ -115,12 +115,6 @@ export class App {
   constructor() {
     this.sync.start();
     void this.seed.seedIfNeeded();
-  }
-
-  cycleLocale(): void {
-    const order: Locale[] = ['es', 'en', 'pt'];
-    const i = order.indexOf(this.i18n.locale());
-    this.i18n.setLocale(order[(i + 1) % order.length]);
   }
 
   onReport(): void {
