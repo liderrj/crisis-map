@@ -1,4 +1,4 @@
-import { MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION } from '../shared/limits';
+import { MAX_IMAGE_BYTES, MAX_IMAGE_DIMENSION } from '../shared/constants';
 
 export async function compressImage(file: Blob): Promise<Blob> {
   const bitmap = await loadBitmap(file);
@@ -26,10 +26,17 @@ export async function compressImage(file: Blob): Promise<Blob> {
 function loadBitmap(file: Blob): Promise<ImageBitmap> {
   if (typeof createImageBitmap === 'function') return createImageBitmap(file);
   return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => resolve(img as unknown as ImageBitmap);
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img as unknown as ImageBitmap);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image decode failed'));
+    };
+    img.src = url;
   });
 }
 

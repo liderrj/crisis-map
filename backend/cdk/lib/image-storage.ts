@@ -20,7 +20,8 @@ export class ImageStorage extends Construct {
         {
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
           allowedOrigins: ['*'],
-          allowedHeaders: ['*'],
+          allowedHeaders: ['Content-Type', 'Content-Length', 'x-amz-content-sha256'],
+          maxAge: 300,
         },
       ],
     });

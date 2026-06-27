@@ -103,4 +103,16 @@ export const MAX_IMAGE_BYTES = 250 * 1024;
 export const MAX_IMAGE_DIMENSION = 1280;
 export const MAX_DESCRIPTION_LENGTH = 500;
 export const MAX_ALIAS_LENGTH = 30;
+export const MAX_DEVICE_ID_LENGTH = 64;
+export const MAX_INCIDENT_ID_LENGTH = 64;
 export const DUPLICATE_RADIUS_METERS = 30;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidDeviceId(value: string): boolean {
+  return UUID_RE.test(value) && value.length <= MAX_DEVICE_ID_LENGTH;
+}
+
+export function isValidIncidentId(value: string): boolean {
+  return UUID_RE.test(value) && value.length <= MAX_INCIDENT_ID_LENGTH;
+}

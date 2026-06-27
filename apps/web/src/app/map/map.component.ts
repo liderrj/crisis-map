@@ -2,7 +2,7 @@ import { Component, ElementRef, ViewChild, AfterViewInit, OnDestroy, inject, sig
 import * as L from 'leaflet';
 import 'leaflet.markercluster';
 import { IncidentLayerService, type FilterState } from './incident-layer.service';
-import { incidentMarkerIcon, incidentPopupHtml } from './marker-style';
+import { incidentMarkerIcon, incidentPopupNode } from './marker-style';
 import type { Incident } from '../shared/constants';
 
 @Component({
@@ -77,7 +77,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     for (const incident of incidents) {
       const marker = L.marker([incident.location.lat, incident.location.lng], {
         icon: incidentMarkerIcon(incident),
-      }).bindPopup(incidentPopupHtml(incident));
+      }).bindPopup(incidentPopupNode(incident));
       this.clusterGroup.addLayer(marker);
     }
   }

@@ -6,8 +6,8 @@ import { ImageUploadService } from './image-upload.service';
 import { StorageService } from '../core/storage.service';
 import { SyncEngineService } from '../core/sync-engine.service';
 import { INCIDENT_TYPES, SEVERITIES } from '../shared/constants';
-import { MAX_DESCRIPTION_LENGTH, MAX_IMAGE_COUNT } from '../shared/limits';
 import type { Severity, IncidentType } from '../shared/constants';
+import { MAX_DESCRIPTION_LENGTH, MAX_IMAGE_COUNT } from '../shared/constants';
 
 @Component({
   selector: 'app-report-form',

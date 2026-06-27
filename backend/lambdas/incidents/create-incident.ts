@@ -12,7 +12,8 @@ import {
   type Incident,
   type IncidentCreateInput,
 } from '../../shared/types.js';
-import { extractDeviceContext, jsonResponse, errorResponse } from '../../shared/headers.js';
+import { extractDeviceContext, jsonResponse, errorResponse, sanitize } from '../../shared/headers.js';
+import { PutCommand } from '@aws-sdk/lib-dynamodb';
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   const device = extractDeviceContext(event.headers as Record<string, string | undefined>);
@@ -61,7 +62,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     status: 'active',
     location: input.location,
     geohash,
-    description: input.description?.slice(0, MAX_DESCRIPTION_LENGTH),
+    description: input.description ? sanitize(input.description, MAX_DESCRIPTION_LENGTH) : undefined,
     createdAt: now,
     updatedAt: now,
     expiresAt: now + EXPIRATION_WINDOW_SECONDS,
@@ -74,10 +75,21 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
 
-  await docClient.send({
-    TableName: TABLES.devices,
-    Item: { deviceId: device.deviceId, alias: device.alias ?? '', createdAt: now },
-  } as unknown as Parameters<typeof docClient.send>[0]);
+  try {
+    await docClient.send(
+      new PutCommand({
+        TableName: TABLES.devices,
+        Item: {
+          deviceId: device.deviceId,
+          alias: device.alias ?? '',
+          createdAt: now,
+          lastSeenAt: now,
+        },
+      }),
+    );
+  } catch (err) {
+    if ((err as Error).name !== 'ConditionalCheckFailedException') throw err;
+  }
 
   return jsonResponse(201, {
     incidentId,

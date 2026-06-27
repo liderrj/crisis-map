@@ -7,12 +7,14 @@ import { isValidIncidentType, isValidSeverity, categoryForType } from '../../sha
 import {
   EXPIRATION_WINDOW_SECONDS,
   MAX_DESCRIPTION_LENGTH,
+  MAX_IMAGE_COUNT,
   DUPLICATE_RADIUS_METERS,
+  isValidIncidentId,
   type Incident,
   type IncidentCreateInput,
   type ConfirmationAction,
 } from '../../shared/types.js';
-import { extractDeviceContext, jsonResponse, errorResponse } from '../../shared/headers.js';
+import { extractDeviceContext, jsonResponse, errorResponse, sanitize } from '../../shared/headers.js';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 
 interface SyncOperation {
@@ -20,42 +22,68 @@ interface SyncOperation {
   payload: Record<string, unknown>;
 }
 
+const MAX_OPERATIONS_PER_REQUEST = 100;
+
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
-  const device = extractDeviceContext(event.headers as Record<string, string | undefined>);
-  if (!device) return errorResponse(400, 'deviceId header is required');
-
-  let body: { operations?: SyncOperation[] };
   try {
-    body = JSON.parse(event.body ?? '{}');
-  } catch {
-    return errorResponse(400, 'Invalid JSON body');
-  }
+    const device = extractDeviceContext(event.headers as Record<string, string | undefined>);
+    if (!device) return errorResponse(400, 'deviceId header is required');
 
-  const operations = body.operations ?? [];
-  const results = [];
-
-  for (const op of operations) {
-    if (op.op === 'create_incident') {
-      const r = await applyCreate(op.payload as unknown as IncidentCreateInput, device);
-      results.push({ op: 'create_incident', ...r });
-    } else if (op.op === 'confirm') {
-      const r = await applyConfirm(op.payload as { incidentId: string; action: string }, device);
-      results.push({ op: 'confirm', ...r });
-    } else {
-      results.push({ op: op.op, status: 'error', message: 'Unknown operation' });
+    let body: { operations?: SyncOperation[] };
+    try {
+      body = JSON.parse(event.body ?? '{}');
+    } catch {
+      return errorResponse(400, 'Invalid JSON body');
     }
-  }
 
-  return jsonResponse(200, { results });
+    const operations = Array.isArray(body.operations) ? body.operations : [];
+    if (operations.length > MAX_OPERATIONS_PER_REQUEST) {
+      return errorResponse(400, `Max ${MAX_OPERATIONS_PER_REQUEST} operations per request`);
+    }
+
+    const results = [];
+    for (const op of operations) {
+      try {
+        if (op?.op === 'create_incident') {
+          const r = await applyCreate(op.payload as unknown as IncidentCreateInput, device);
+          results.push({ op: 'create_incident', ...r });
+        } else if (op?.op === 'confirm') {
+          const r = await applyConfirm(op.payload as { incidentId: string; action: string }, device);
+          results.push({ op: 'confirm', ...r });
+        } else {
+          results.push({ op: op?.op ?? 'unknown', status: 'error', message: 'Unknown operation' });
+        }
+      } catch (err) {
+        console.error('Sync op error:', err);
+        results.push({ op: op?.op ?? 'unknown', status: 'error', message: 'Operation failed' });
+      }
+    }
+
+    return jsonResponse(200, { results });
+  } catch (err) {
+    console.error('Sync handler error:', err);
+    return errorResponse(500, 'Internal error');
+  }
 };
 
 async function applyCreate(
   input: IncidentCreateInput,
   device: { deviceId: string; alias?: string },
 ): Promise<Record<string, unknown>> {
-  if (!input.type || !isValidIncidentType(input.type)) return { status: 'error', message: 'Invalid type' };
-  if (!input.severity || !isValidSeverity(input.severity)) return { status: 'error', message: 'Invalid severity' };
-  if (!input.location) return { status: 'error', message: 'Invalid location' };
+  if (!input?.type || !isValidIncidentType(input.type)) return { status: 'error', message: 'Invalid type' };
+  if (!input?.severity || !isValidSeverity(input.severity)) return { status: 'error', message: 'Invalid severity' };
+  if (
+    !input?.location ||
+    typeof input.location.lat !== 'number' ||
+    typeof input.location.lng !== 'number' ||
+    input.location.lat < -90 ||
+    input.location.lat > 90 ||
+    input.location.lng < -180 ||
+    input.location.lng > 180
+  ) {
+    return { status: 'error', message: 'Invalid location' };
+  }
+  const imageCount = Math.max(0, Math.min(MAX_IMAGE_COUNT, input.imageCount ?? 0));
 
   const geohash = encodeGeohash(input.location.lat, input.location.lng);
   const duplicate = await findDuplicate(input.type, geohash, input.location.lat, input.location.lng);
@@ -73,7 +101,7 @@ async function applyCreate(
     status: 'active',
     location: input.location,
     geohash,
-    description: input.description?.slice(0, MAX_DESCRIPTION_LENGTH),
+    description: input.description ? sanitize(input.description, MAX_DESCRIPTION_LENGTH) : undefined,
     createdAt: now,
     updatedAt: now,
     expiresAt: now + EXPIRATION_WINDOW_SECONDS,
@@ -81,7 +109,7 @@ async function applyCreate(
     creatorDeviceId: device.deviceId,
     confirmations: 1,
     negativeVotes: 0,
-    imageCount: input.imageCount ?? 0,
+    imageCount,
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
@@ -92,6 +120,9 @@ async function applyConfirm(
   payload: { incidentId: string; action: string },
   device: { deviceId: string; alias?: string },
 ): Promise<Record<string, unknown>> {
+  if (!payload?.incidentId || !isValidIncidentId(payload.incidentId)) {
+    return { status: 'error', message: 'Invalid incidentId' };
+  }
   const action = payload.action as ConfirmationAction;
   if (!['confirm', 'improved', 'worsened', 'no_longer_exists'].includes(action)) {
     return { status: 'error', message: 'Invalid action' };
@@ -114,21 +145,13 @@ async function applyConfirm(
   }
 
   const expiresAt = now + EXPIRATION_WINDOW_SECONDS;
-  let update = 'SET confirmations = confirmations + :one, updatedAt = :now, expiresAt = :exp';
-  const values: Record<string, unknown> = { ':one': 1, ':now': now, ':exp': expiresAt };
-  if (action === 'worsened') {
-    update = 'SET negativeVotes = negativeVotes + :one, updatedAt = :now';
-    const worsenedValues: Record<string, unknown> = { ':one': 1, ':now': now };
-    await docClient.send(
-      new UpdateCommand({
-        TableName: TABLES.incidents,
-        Key: { incidentId: payload.incidentId },
-        UpdateExpression: update,
-        ExpressionAttributeValues: worsenedValues,
-      }),
-    );
-    return { status: 'applied', incidentId: payload.incidentId };
-  }
+  const isWorsened = action === 'worsened';
+  const update = isWorsened
+    ? 'SET negativeVotes = negativeVotes + :one, updatedAt = :now'
+    : 'SET confirmations = confirmations + :one, updatedAt = :now, expiresAt = :exp';
+  const values: Record<string, unknown> = isWorsened
+    ? { ':one': 1, ':now': now }
+    : { ':one': 1, ':now': now, ':exp': expiresAt };
 
   await docClient.send(
     new UpdateCommand({

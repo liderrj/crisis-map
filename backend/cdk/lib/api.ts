@@ -15,6 +15,16 @@ export class CrisisMapApi extends Construct {
         allowHeaders: ['Content-Type', 'deviceId', 'alias'],
       },
     });
+
+    new apigatewayv2.CfnStage(this, 'DefaultStage', {
+      apiId: this.httpApi.apiId,
+      stageName: '$default',
+      autoDeploy: true,
+      defaultRouteSettings: {
+        throttlingBurstLimit: 200,
+        throttlingRateLimit: 100,
+      },
+    });
   }
 
   public get url(): string {
