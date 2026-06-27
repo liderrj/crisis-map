@@ -13,7 +13,7 @@ export class CrisisMapApi extends Construct {
       corsPreflight: {
         allowOrigins: ['*'],
         allowMethods: [apigatewayv2.CorsHttpMethod.GET, apigatewayv2.CorsHttpMethod.POST, apigatewayv2.CorsHttpMethod.OPTIONS],
-        allowHeaders: ['Content-Type', 'deviceId', 'alias'],
+        allowHeaders: ['Content-Type', 'deviceId', 'alias', 'X-Seed-Token'],
       },
     });
 
