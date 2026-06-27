@@ -1,0 +1,160 @@
+import { Component, output, inject, signal, computed } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { I18nService } from '../core/i18n.service';
+import { DeviceIdService } from '../core/device-id.service';
+
+const CONTACT_EMAIL = 'arkemdigital@gmail.com';
+
+interface SubjectOption {
+  key: string;
+  fallback: string;
+}
+
+@Component({
+  selector: 'app-contact',
+  standalone: true,
+  imports: [FormsModule],
+  template: `
+    <div class="cm-backdrop" (click)="close.emit()"></div>
+    <div class="cm-contact" role="dialog" [attr.aria-label]="i18n.t('contact.title')" (click)="$event.stopPropagation()">
+      <header>
+        <h3>{{ i18n.t('contact.title') }}</h3>
+        <button class="cm-close" (click)="close.emit()" [attr.aria-label]="i18n.t('common.close')">×</button>
+      </header>
+
+      <div class="cm-body">
+        <p class="cm-preview">{{ i18n.t('contact.preview', { email: CONTACT_EMAIL }) }}</p>
+
+        <label>{{ i18n.t('contact.subject') }}
+          <select [(ngModel)]="subjectKey" (change)="updateBody()">
+            @for (s of subjects; track s.key) {
+              <option [value]="s.key">{{ i18n.t(s.key) || s.fallback }}</option>
+            }
+          </select>
+        </label>
+
+        <label>{{ i18n.t('contact.message') }}
+          <textarea [(ngModel)]="message" (ngModelChange)="onMessageChange()" rows="6"
+            [placeholder]="i18n.t('contact.message.placeholder')"></textarea>
+        </label>
+
+        <details class="cm-advanced">
+          <summary>{{ advancedLabel }}</summary>
+          <label class="cm-inline-label">
+            <span>From (your alias)</span>
+            <input type="text" [(ngModel)]="alias" maxlength="30" />
+          </label>
+          <label class="cm-inline-label">
+            <span>Device ID (auto-included)</span>
+            <input type="text" [value]="deviceId" readonly />
+          </label>
+          <label class="cm-inline-label">
+            <span>Language</span>
+            <input type="text" [value]="langLabelValue()" readonly />
+          </label>
+        </details>
+      </div>
+
+      <footer>
+        <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('contact.cancel') }}</button>
+        <a class="cm-btn cm-btn-primary" [href]="mailtoUrl()" target="_blank" rel="noopener" (click)="close.emit()">
+          {{ i18n.t('contact.send') }}
+        </a>
+      </footer>
+    </div>
+  `,
+  styles: [`
+    .cm-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 1100; }
+    .cm-contact {
+      position: fixed; top: 5vh; left: 50%; transform: translateX(-50%);
+      width: min(92vw, 520px); max-height: 92vh;
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+      display: flex; flex-direction: column;
+      z-index: 1101; overflow: hidden;
+    }
+    header { display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid #eee; background: #00838f; color: #fff; }
+    header h3 { margin: 0; font-size: 18px; }
+    .cm-close { background: transparent; color: #fff; border: none;
+      font-size: 24px; line-height: 1; cursor: pointer; padding: 0 8px; }
+    .cm-body { padding: 16px 20px; overflow-y: auto; flex: 1; display: flex;
+      flex-direction: column; gap: 12px; }
+    .cm-preview {
+      background: #e0f7fa; color: #006064; padding: 10px 12px;
+      border-radius: 6px; font-size: 13px; margin: 0;
+    }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+    label.cm-inline-label { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; }
+    label.cm-inline-label span { min-width: 110px; font-weight: 600; }
+    label.cm-inline-label input { flex: 1; }
+    select, textarea, input {
+      padding: 10px; font-size: 15px; border: 2px solid #ccc; border-radius: 6px;
+      width: 100%; box-sizing: border-box; font-family: inherit;
+    }
+    textarea { resize: vertical; min-height: 120px; }
+    .cm-advanced { margin-top: 8px; }
+    .cm-advanced summary { cursor: pointer; font-size: 13px; color: #555;
+      padding: 6px 0; user-select: none; }
+    .cm-advanced[open] summary { margin-bottom: 8px; }
+    footer { padding: 14px 20px; border-top: 1px solid #eee; background: #fafafa;
+      display: flex; gap: 8px; }
+    .cm-btn { flex: 1; padding: 14px; font-size: 15px; font-weight: 600;
+      border: none; border-radius: 6px; cursor: pointer; text-align: center;
+      text-decoration: none; display: inline-block; }
+    .cm-btn-primary { background: #00838f; color: #fff; }
+    .cm-btn-ghost { background: transparent; color: #c62828; border: 1px solid #c62828; }
+  `],
+})
+export class ContactComponent {
+  readonly i18n = inject(I18nService);
+  private deviceSvc = inject(DeviceIdService);
+  readonly close = output<void>();
+
+  readonly subjects: SubjectOption[] = [
+    { key: 'contact.subject.bug', fallback: 'Reportar un error / problema técnico' },
+    { key: 'contact.subject.safety', fallback: 'Reportar uso inapropiado / abuso' },
+    { key: 'contact.subject.coordinate', fallback: 'Coordinar ayuda en zona' },
+    { key: 'contact.subject.press', fallback: 'Prensa / medios' },
+    { key: 'contact.subject.other', fallback: 'Otro asunto' },
+  ];
+
+  readonly subjectKey = signal('contact.subject.bug');
+  readonly message = signal('');
+  readonly alias = signal('');
+
+  readonly deviceId = this.deviceSvc.device().deviceId;
+  readonly langLabelValue = computed(() => {
+    const l = this.i18n.locale();
+    return l === 'es' ? 'Español' : l === 'en' ? 'English' : 'Português';
+  });
+  readonly advancedLabel = 'Detalles técnicos (opcional)';
+
+  readonly CONTACT_EMAIL = CONTACT_EMAIL;
+
+  updateBody(): void {
+    // Placeholder could be set per-subject; user edits the textarea anyway.
+  }
+
+  onMessageChange(): void {
+    // No-op; just to keep ngModelChange wiring consistent.
+  }
+
+  mailtoUrl(): string {
+    const subject = encodeURIComponent(`[CrisisMap] ${this.subjectLabel()}`);
+    const meta = [
+      `Idioma: ${this.langLabelValue()}`,
+      `Device ID: ${this.deviceId}`,
+      this.alias() ? `Alias: ${this.alias()}` : '',
+      `Locale: ${this.i18n.locale()}`,
+      '',
+    ].filter(Boolean).join('\n');
+    const body = encodeURIComponent(`${meta}${this.message()}`);
+    return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+  }
+
+  private subjectLabel(): string {
+    const found = this.subjects.find((s) => s.key === this.subjectKey());
+    return this.i18n.t(found?.key ?? 'contact.subject.other') || found?.fallback || '';
+  }
+}

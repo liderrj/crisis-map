@@ -1,6 +1,7 @@
-import { Component, output, signal } from '@angular/core';
-import type { IncidentCategory, IncidentType } from '../shared/constants';
+import { Component, output, signal, inject } from '@angular/core';
+import type { IncidentCategory } from '../shared/constants';
 import { CATEGORY_LABELS } from '../shared/constants';
+import { I18nService } from '../core/i18n.service';
 import type { FilterState } from '../map/incident-layer.service';
 
 @Component({
@@ -8,15 +9,15 @@ import type { FilterState } from '../map/incident-layer.service';
   standalone: true,
   template: `
     <div class="cm-panel" (click)="$event.stopPropagation()">
-      <h3>Filters</h3>
+      <h3>{{ i18n.t('filters.title') }}</h3>
       @for (c of categories; track c) {
         <label><input type="checkbox" [checked]="sel().categories.has(c)"
-          (change)="toggleCat(c)" />{{ labels[c] }}</label>
+          (change)="toggleCat(c)" />{{ i18n.t('cat.' + c) }}</label>
       }
       <label><input type="checkbox" [checked]="sel().confirmedOnly"
-        (change)="toggleConfirmed($event)" />Confirmed only</label>
-      <button class="cm-btn" (click)="apply()">Apply</button>
-      <button class="cm-btn cm-btn-ghost" (click)="close.emit()">Close</button>
+        (change)="toggleConfirmed($event)" />{{ i18n.t('filters.confirmedOnly') }}</label>
+      <button class="cm-btn" (click)="apply()">{{ i18n.t('filters.apply') }}</button>
+      <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('filters.close') }}</button>
     </div>
   `,
   styles: [`
@@ -31,11 +32,11 @@ import type { FilterState } from '../map/incident-layer.service';
   `],
 })
 export class FiltersComponent {
+  readonly i18n = inject(I18nService);
   readonly applyFilters = output<FilterState>();
   readonly close = output<void>();
   readonly sel = signal<FilterState>({ categories: new Set(), confirmedOnly: false, types: new Set() });
   readonly categories: IncidentCategory[] = ['emergency', 'infrastructure', 'service_interruption', 'resource', 'communications'];
-  readonly labels = CATEGORY_LABELS;
 
   toggleCat(c: IncidentCategory): void {
     const s = this.sel();
@@ -53,4 +54,6 @@ export class FiltersComponent {
     this.applyFilters.emit(this.sel());
     this.close.emit();
   }
+
+  labels(): Record<IncidentCategory, string> { return CATEGORY_LABELS; }
 }

@@ -1,4 +1,5 @@
-import { Component, output, signal } from '@angular/core';
+import { Component, output, signal, inject } from '@angular/core';
+import { I18nService } from '../core/i18n.service';
 
 const STORAGE_KEY = 'crisismap_terms_v1';
 
@@ -10,7 +11,7 @@ const STORAGE_KEY = 'crisismap_terms_v1';
       <div class="cm-backdrop" role="dialog" aria-modal="true" aria-labelledby="terms-title">
         <div class="cm-terms">
           <header>
-            <h2 id="terms-title">Términos y Política de Privacidad</h2>
+            <h2 id="terms-title">{{ i18n.t('terms.title') }}</h2>
           </header>
 
           <div class="cm-body">
@@ -264,12 +265,12 @@ const STORAGE_KEY = 'crisismap_terms_v1';
           <footer>
             <label class="cm-checkbox">
               <input type="checkbox" [checked]="accepted()" (change)="toggleAccept($event)" />
-              <span>He leído y acepto los Términos y la Política de Privacidad</span>
+              <span>{{ i18n.t('terms.consent') }}</span>
             </label>
             <div class="cm-buttons">
-              <button class="cm-btn cm-btn-ghost" (click)="onDecline()">No acepto, salir</button>
+              <button class="cm-btn cm-btn-ghost" (click)="onDecline()">{{ i18n.t('terms.decline') }}</button>
               <button class="cm-btn cm-btn-primary" [disabled]="!accepted()" (click)="onAccept()">
-                Aceptar y continuar
+                {{ i18n.t('terms.accept') }}
               </button>
             </div>
           </footer>
@@ -332,6 +333,7 @@ const STORAGE_KEY = 'crisismap_terms_v1';
   `],
 })
 export class TermsComponent {
+  readonly i18n = inject(I18nService);
   readonly close = output<void>();
   readonly accepted = signal(false);
   readonly visible = signal(this.shouldShow());

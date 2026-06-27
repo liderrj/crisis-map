@@ -3,6 +3,7 @@ import * as L from 'leaflet';
 import 'leaflet.markercluster';
 import { IncidentLayerService, type FilterState } from './incident-layer.service';
 import { incidentMarkerIcon, incidentPopupNode } from './marker-style';
+import { I18nService } from '../core/i18n.service';
 import type { Incident } from '../shared/constants';
 
 @Component({
@@ -14,6 +15,7 @@ import type { Incident } from '../shared/constants';
 export class MapComponent implements AfterViewInit, OnDestroy {
   @ViewChild('mapEl', { static: true }) mapEl!: ElementRef<HTMLDivElement>;
   private layer = inject(IncidentLayerService);
+  private i18n = inject(I18nService);
   private map!: L.Map;
   private clusterGroup!: L.MarkerClusterGroup;
   readonly filters = signal<FilterState>({
@@ -74,9 +76,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   render(incidents: Incident[]): void {
     this.clusterGroup.clearLayers();
     for (const incident of incidents) {
+      const typeLabel = this.i18n.t('type.' + incident.type) || incident.type;
       const marker = L.marker([incident.location.lat, incident.location.lng], {
-        icon: incidentMarkerIcon(incident),
-      }).bindPopup(incidentPopupNode(incident));
+        icon: incidentMarkerIcon(incident, typeLabel),
+      }).bindPopup(incidentPopupNode(incident, (k) => this.i18n.t(k)));
       this.clusterGroup.addLayer(marker);
     }
   }

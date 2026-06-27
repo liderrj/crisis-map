@@ -1,42 +1,59 @@
-import { Component, output } from '@angular/core';
+import { Component, output, inject, computed } from '@angular/core';
+import { I18nService } from '../core/i18n.service';
 
 interface ExternalLink {
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
+  titleFallback: string;
+  descriptionFallback: string;
   url: string;
-  badge?: string;
+  badgeKey?: string;
+  badgeFallback?: string;
 }
 
 const LINKS: ExternalLink[] = [
   {
-    title: 'SISMO 2026 VZLA — Drive de hospitales',
-    description: 'Carpetas por hospital, listas de ingresados y reportes de campo (gestionado por terceros).',
+    titleKey: 'resources.link.drive.title',
+    descriptionKey: 'resources.link.drive.desc',
+    titleFallback: 'SISMO 2026 VZLA — Drive de hospitales',
+    descriptionFallback: 'Carpetas por hospital, listas de ingresados y reportes de campo (gestionado por terceros).',
     url: 'https://drive.google.com/drive/folders/1o36ifaRz45kAs5rKzci49aD0mP5JB_YI',
-    badge: 'Drive público',
+    badgeKey: 'resources.badge.public',
+    badgeFallback: 'Drive público',
   },
   {
-    title: 'Cruz Roja Venezolana',
-    description: 'Filiales en todo el país. Búsqueda de personas y atención de emergencias.',
+    titleKey: 'resources.link.crv.title',
+    descriptionKey: 'resources.link.crv.desc',
+    titleFallback: 'Cruz Roja Venezolana',
+    descriptionFallback: 'Filiales en todo el país. Búsqueda de personas y atención de emergencias.',
     url: 'https://www.cruzrojavenezolana.org/',
   },
   {
-    title: 'Cruz Roja Venezolana — Búsqueda de personas (RCF)',
-    description: 'Programa Restablecimiento del Contacto entre Familias. Contacta la filial más cercana.',
+    titleKey: 'resources.link.crv.rcf.title',
+    descriptionKey: 'resources.link.crv.rcf.desc',
+    titleFallback: 'Cruz Roja Venezolana — Búsqueda de personas (RCF)',
+    descriptionFallback: 'Programa Restablecimiento del Contacto entre Familias. Contacta la filial más cercana.',
     url: 'https://www.cruzrojavenezolana.org/restablecimiento-del-contacto-entre-familias/',
   },
   {
-    title: 'Bomberos del Distrito Capital',
-    description: 'Cuerpo de bomberos de Caracas. Emergencias por derrumbe, rescate, incendio.',
+    titleKey: 'resources.link.bomberos.title',
+    descriptionKey: 'resources.link.bomberos.desc',
+    titleFallback: 'Bomberos del Distrito Capital',
+    descriptionFallback: 'Cuerpo de bomberos de Caracas. Emergencias por derrumbe, rescate, incendio.',
     url: 'https://www.bomberosdc.gob.ve/',
   },
   {
-    title: 'INAMEH — Instituto Nacional de Meteorología e Hidrología',
-    description: 'Pronóstico oficial del clima y alerta de réplicas / lluvia (riesgo de deslaves).',
+    titleKey: 'resources.link.inameh.title',
+    descriptionKey: 'resources.link.inameh.desc',
+    titleFallback: 'INAMEH — Instituto Nacional de Meteorología e Hidrología',
+    descriptionFallback: 'Pronóstico oficial del clima y alerta de réplicas / lluvia (riesgo de deslaves).',
     url: 'https://www.inameh.gob.ve/',
   },
   {
-    title: 'USGS — Detalle del evento sísmico',
-    description: 'Información técnica oficial del terremoto M 7.5 del 24/06/2026 (USGS Earthquake Hazards Program).',
+    titleKey: 'resources.link.usgs.title',
+    descriptionKey: 'resources.link.usgs.desc',
+    titleFallback: 'USGS — Detalle del evento sísmico',
+    descriptionFallback: 'Información técnica oficial del terremoto M 7.5 del 24/06/2026 (USGS Earthquake Hazards Program).',
     url: 'https://earthquake.usgs.gov/earthquakes/eventpage/us6000t7zp/executive',
   },
 ];
@@ -46,37 +63,32 @@ const LINKS: ExternalLink[] = [
   standalone: true,
   template: `
     <div class="cm-backdrop" (click)="close.emit()"></div>
-    <div class="cm-resources" role="dialog" aria-label="Recursos externos">
+    <div class="cm-resources" role="dialog" [attr.aria-label]="i18n.t('resources.title')">
       <header>
-        <h3>Recursos externos</h3>
-        <button class="cm-close" (click)="close.emit()" aria-label="Cerrar">×</button>
+        <h3>{{ i18n.t('resources.title') }}</h3>
+        <button class="cm-close" (click)="close.emit()" [attr.aria-label]="i18n.t('common.close')">×</button>
       </header>
 
-      <p class="cm-disclaimer">
-        Estos enlaces son recursos de <strong>terceros</strong>. CrisisMap solo los comparte
-        como referencia; <strong>no garantiza ni verifica</strong> la exactitud, disponibilidad
-        ni vigencia de su contenido. Úselos bajo su propio criterio.
-      </p>
+      <p class="cm-disclaimer" [innerHTML]="disclaimerText()"></p>
 
       <ul class="cm-linklist">
         @for (link of links; track link.url) {
           <li>
             <a [href]="link.url" target="_blank" rel="noopener noreferrer">
-              <span class="cm-link-title">{{ link.title }}</span>
-              @if (link.badge) { <span class="cm-badge">{{ link.badge }}</span> }
-              <span class="cm-link-desc">{{ link.description }}</span>
+              <span class="cm-link-title">{{ i18n.t(link.titleKey) || link.titleFallback }}</span>
+              @if (link.badgeKey) {
+                <span class="cm-badge">{{ i18n.t(link.badgeKey) || link.badgeFallback }}</span>
+              }
+              <span class="cm-link-desc">{{ i18n.t(link.descriptionKey) || link.descriptionFallback }}</span>
               <span class="cm-link-url">{{ link.url }}</span>
             </a>
           </li>
         }
       </ul>
 
-      <p class="cm-disclaimer cm-disclaimer-footer">
-        ¿Tienes un recurso oficial para agregar? Comparte el enlace por los canales
-        habituales. CrisisMap no edita esta lista automáticamente.
-      </p>
+      <p class="cm-disclaimer cm-disclaimer-footer">{{ i18n.t('resources.disclaimer.footer') }}</p>
 
-      <button class="cm-btn" (click)="close.emit()">Cerrar</button>
+      <button class="cm-btn" (click)="close.emit()">{{ i18n.t('resources.close') }}</button>
     </div>
   `,
   styles: [`
@@ -105,7 +117,7 @@ const LINKS: ExternalLink[] = [
       font-size: 13px; line-height: 1.4;
       border-bottom: 1px solid #f0e0a0;
     }
-    .cm-disclaimer strong { font-weight: 700; }
+    .cm-disclaimer :global(strong) { font-weight: 700; }
     .cm-disclaimer-footer {
       background: #f5f5f5; color: #555;
       font-size: 12px; border-top: 1px solid #eee; border-bottom: none;
@@ -145,6 +157,8 @@ const LINKS: ExternalLink[] = [
   `],
 })
 export class ResourcesComponent {
+  readonly i18n = inject(I18nService);
   readonly close = output<void>();
   readonly links = LINKS;
+  readonly disclaimerText = computed(() => this.i18n.t('resources.disclaimer'));
 }

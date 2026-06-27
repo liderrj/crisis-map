@@ -1,5 +1,6 @@
 import { Component, output, input, inject } from '@angular/core';
 import { ApiClientService } from '../core/api-client.service';
+import { I18nService } from '../core/i18n.service';
 
 @Component({
   selector: 'app-duplicate-prompt',
@@ -7,11 +8,11 @@ import { ApiClientService } from '../core/api-client.service';
   template: `
     <div class="cm-modal">
       <div class="cm-modal-box">
-        <h3>Similar incident nearby</h3>
-        <p>A similar incident already exists near this location.</p>
+        <h3>{{ i18n.t('duplicate.title') }}</h3>
+        <p>{{ i18n.t('duplicate.body') }}</p>
         <div class="cm-actions">
-          <button class="cm-btn cm-btn-ghost" (click)="createNew.emit()">Create new</button>
-          <button class="cm-btn" (click)="confirmExisting()">Confirm existing</button>
+          <button class="cm-btn cm-btn-ghost" (click)="createNew.emit()">{{ i18n.t('duplicate.createNew') }}</button>
+          <button class="cm-btn" (click)="confirmExisting()">{{ i18n.t('duplicate.confirmExisting') }}</button>
         </div>
       </div>
     </div>
@@ -31,6 +32,7 @@ export class DuplicatePromptComponent {
   readonly createNew = output<void>();
   readonly resolved = output<void>();
   private api = inject(ApiClientService);
+  readonly i18n = inject(I18nService);
 
   async confirmExisting(): Promise<void> {
     try { await this.api.confirm(this.incidentId(), 'confirm'); } catch { /* ignore */ }

@@ -1,5 +1,6 @@
 import { Component, input, output, inject, signal } from '@angular/core';
 import { ApiClientService } from '../core/api-client.service';
+import { I18nService } from '../core/i18n.service';
 import type { ConfirmationAction } from '../shared/constants';
 
 @Component({
@@ -8,18 +9,18 @@ import type { ConfirmationAction } from '../shared/constants';
   template: `
     <div class="cm-modal">
       <div class="cm-modal-box">
-        <h3>{{ incident()?.type?.replace(/_/g, ' ') }}</h3>
-        <p class="cm-conf">Confirmed by {{ incident()?.confirmations }} people</p>
+        <h3>{{ i18n.t('type.' + (incident()?.type ?? '')) || incident()?.type }}</h3>
+        <p class="cm-conf">{{ i18n.t('incident.confirmedBy', { n: incident()?.confirmations ?? 0 }) }}</p>
         @if (incident()?.description) { <p>{{ incident()?.description }}</p> }
-        <h4>Verify this report</h4>
+        <h4>{{ i18n.t('incident.title') }}</h4>
         <div class="cm-verify">
-          <button (click)="act('confirm')">Confirm</button>
-          <button (click)="act('improved')">Improved</button>
-          <button (click)="act('worsened')">Worsened</button>
-          <button (click)="act('no_longer_exists')">Gone</button>
+          <button (click)="act('confirm')">{{ i18n.t('incident.confirm') }}</button>
+          <button (click)="act('improved')">{{ i18n.t('incident.improved') }}</button>
+          <button (click)="act('worsened')">{{ i18n.t('incident.worsened') }}</button>
+          <button (click)="act('no_longer_exists')">{{ i18n.t('incident.gone') }}</button>
         </div>
         @if (msg()) { <p class="cm-msg">{{ msg() }}</p> }
-        <button class="cm-close" (click)="close.emit()">Close</button>
+        <button class="cm-close" (click)="close.emit()">{{ i18n.t('incident.close') }}</button>
       </div>
     </div>
   `,
@@ -41,6 +42,7 @@ export class IncidentDetailComponent {
   readonly incident = input<{ incidentId: string; type: string; confirmations: number; description?: string } | null>(null);
   readonly close = output<void>();
   private api = inject(ApiClientService);
+  readonly i18n = inject(I18nService);
   readonly msg = signal('');
 
   async act(action: ConfirmationAction): Promise<void> {
@@ -48,9 +50,9 @@ export class IncidentDetailComponent {
     if (!id) return;
     try {
       await this.api.confirm(id, action);
-      this.msg.set(action === 'no_longer_exists' ? 'Marked as no longer exists.' : 'Verified. Thank you.');
+      this.msg.set(action === 'no_longer_exists' ? '✓' : '✓');
     } catch (e) {
-      this.msg.set((e as Error).message?.includes('409') ? 'Already verified from this device.' : 'Could not verify.');
+      this.msg.set(this.i18n.t('incident.alreadyVerified'));
     }
   }
 }

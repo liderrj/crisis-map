@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, inject } from '@angular/core';
+import { I18nService } from '../core/i18n.service';
 
 @Component({
   selector: 'app-quake-banner',
@@ -8,10 +9,10 @@ import { Component, signal } from '@angular/core';
       <div class="cm-quake-banner" role="alert">
         <span class="cm-quake-icon">⚠</span>
         <span class="cm-quake-text">
-          <strong>Sismo M 7.5</strong> · 24/06/2026 · Altamira / La Guaira
+          <strong>{{ i18n.t('banner.quake.summary') }}</strong>
         </span>
-        <span class="cm-quake-detail">+100 edificios caídos · aeropuerto cerrado</span>
-        <button class="cm-quake-dismiss" (click)="dismiss()" aria-label="Cerrar">×</button>
+        <span class="cm-quake-detail">{{ i18n.t('banner.quake.detail') }}</span>
+        <button class="cm-quake-dismiss" (click)="dismiss()" [attr.aria-label]="i18n.t('banner.dismiss')">×</button>
       </div>
     }
   `,
@@ -39,6 +40,7 @@ import { Component, signal } from '@angular/core';
   `],
 })
 export class QuakeBannerComponent {
+  readonly i18n = inject(I18nService);
   readonly visible = signal(true);
   dismiss(): void { this.visible.set(false); }
 }

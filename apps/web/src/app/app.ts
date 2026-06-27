@@ -1,4 +1,4 @@
-import { Component, signal, inject, ViewChild } from '@angular/core';
+import { Component, signal, inject, ViewChild, computed } from '@angular/core';
 import { MapComponent } from './map/map.component';
 import { MapControlsComponent } from './map/map-controls.component';
 import { FiltersComponent } from './filters/filters.component';
@@ -9,8 +9,10 @@ import { IncidentDetailComponent } from './incident/incident-detail.component';
 import { QuakeBannerComponent } from './banner/quake-banner.component';
 import { ResourcesComponent } from './resources/resources.component';
 import { TermsComponent } from './terms/terms.component';
+import { ContactComponent } from './contact/contact.component';
 import { SyncEngineService } from './core/sync-engine.service';
 import { SeedService } from './core/seed.service';
+import { I18nService, type Locale } from './core/i18n.service';
 import type { FilterState } from './map/incident-layer.service';
 
 @Component({
@@ -27,6 +29,7 @@ import type { FilterState } from './map/incident-layer.service';
     QuakeBannerComponent,
     ResourcesComponent,
     TermsComponent,
+    ContactComponent,
   ],
   template: `
     <app-quake-banner />
@@ -38,6 +41,8 @@ import type { FilterState } from './map/incident-layer.service';
       (legend)="showLegend.set(true)"
       (resources)="showResources.set(true)"
       (terms)="showTerms.set(true)"
+      (contact)="showContact.set(true)"
+      (toggleLang)="cycleLocale()"
     />
 
     @if (showReport()) {
@@ -73,6 +78,10 @@ import type { FilterState } from './map/incident-layer.service';
       <app-resources (close)="showResources.set(false)" />
     }
 
+    @if (showContact()) {
+      <app-contact (close)="showContact.set(false)" />
+    }
+
     @if (showTerms()) {
       <app-terms (close)="showTerms.set(false)" />
     }
@@ -92,18 +101,26 @@ export class App {
   @ViewChild(MapComponent) mapComp?: MapComponent;
   private sync = inject(SyncEngineService);
   private seed = inject(SeedService);
+  readonly i18n = inject(I18nService);
 
   readonly showReport = signal(false);
   readonly showFilters = signal(false);
   readonly showLegend = signal(false);
   readonly showResources = signal(false);
   readonly showTerms = signal(false);
+  readonly showContact = signal(false);
   readonly duplicateId = signal('');
   readonly selectedIncident = signal<{ incidentId: string; type: string; confirmations: number; description?: string } | null>(null);
 
   constructor() {
     this.sync.start();
     void this.seed.seedIfNeeded();
+  }
+
+  cycleLocale(): void {
+    const order: Locale[] = ['es', 'en', 'pt'];
+    const i = order.indexOf(this.i18n.locale());
+    this.i18n.setLocale(order[(i + 1) % order.length]);
   }
 
   onReport(): void {

@@ -1,20 +1,21 @@
-import { Component, inject, output } from '@angular/core';
+import { Component, inject, output, signal, OnInit } from '@angular/core';
 import { ApiClientService } from '../core/api-client.service';
 import { CATEGORY_LABELS, CATEGORY_COLOURS } from '../shared/constants';
+import { I18nService } from '../core/i18n.service';
 
 @Component({
   selector: 'app-legend',
   standalone: true,
   template: `
     <div class="cm-legend" (click)="$event.stopPropagation()">
-      <h3>Legend</h3>
-      @for (item of items; track item.colour) {
+      <h3>{{ i18n.t('legend.title') }}</h3>
+      @for (item of items(); track item.colour) {
         <div class="cm-leg-row">
           <span class="cm-leg-dot" [style.background]="item.colour"></span>
           <span>{{ item.label }}</span>
         </div>
       }
-      <button class="cm-btn" (click)="close.emit()">Close</button>
+      <button class="cm-btn" (click)="close.emit()">{{ i18n.t('legend.close') }}</button>
     </div>
   `,
   styles: [`
@@ -28,18 +29,29 @@ import { CATEGORY_LABELS, CATEGORY_COLOURS } from '../shared/constants';
       border-radius: 8px; background: #1976d2; color: #fff; cursor: pointer; }
   `],
 })
-export class LegendComponent {
+export class LegendComponent implements OnInit {
+  readonly i18n = inject(I18nService);
   readonly close = output<void>();
   private api = inject(ApiClientService);
-  items = Object.keys(CATEGORY_COLOURS).map((c) => ({
-    colour: CATEGORY_COLOURS[c as keyof typeof CATEGORY_COLOURS],
-    label: CATEGORY_LABELS[c as keyof typeof CATEGORY_LABELS],
-  }));
+  readonly items = signal<{ colour: string; label: string }[]>(
+    Object.keys(CATEGORY_COLOURS).map((c) => ({
+      colour: CATEGORY_COLOURS[c as keyof typeof CATEGORY_COLOURS],
+      label: this.i18n.t('cat.' + c),
+    })),
+  );
 
   async ngOnInit(): Promise<void> {
+    this.items.set(
+      Object.keys(CATEGORY_COLOURS).map((c) => ({
+        colour: CATEGORY_COLOURS[c as keyof typeof CATEGORY_COLOURS],
+        label: this.i18n.t('cat.' + c),
+      })),
+    );
     try {
       const legend = await this.api.getLegend();
-      if (legend.length) this.items = legend;
+      if (legend.length) {
+        this.items.set(legend.map((l) => ({ colour: l.colour, label: CATEGORY_LABELS[l.colour as keyof typeof CATEGORY_LABELS] ?? l.label })));
+      }
     } catch {
       // keep defaults
     }
