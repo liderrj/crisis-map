@@ -9,6 +9,7 @@ import { Component, output } from '@angular/core';
     <button class="cm-fab cm-fab-filter" (click)="filters.emit()" aria-label="Filters">☰</button>
     <button class="cm-fab cm-fab-legend" (click)="legend.emit()" aria-label="Legend">i</button>
     <button class="cm-fab cm-fab-resources" (click)="resources.emit()" aria-label="Recursos externos">⛓</button>
+    <button class="cm-fab cm-fab-terms" (click)="terms.emit()" aria-label="Términos y privacidad">§</button>
   `,
   styles: [`
     .cm-fab { position: fixed; right: 16px; width: 56px; height: 56px; border-radius: 50%;
@@ -19,6 +20,7 @@ import { Component, output } from '@angular/core';
     .cm-fab-filter { bottom: 228px; }
     .cm-fab-legend { bottom: 294px; }
     .cm-fab-resources { bottom: 360px; font-size: 22px; }
+    .cm-fab-terms { bottom: 426px; font-size: 22px; background: #424242; color: #fff; }
   `],
 })
 export class MapControlsComponent {
@@ -27,4 +29,5 @@ export class MapControlsComponent {
   readonly filters = output<void>();
   readonly legend = output<void>();
   readonly resources = output<void>();
+  readonly terms = output<void>();
 }

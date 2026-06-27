@@ -8,6 +8,7 @@ import { DuplicatePromptComponent } from './report/duplicate-prompt.component';
 import { IncidentDetailComponent } from './incident/incident-detail.component';
 import { QuakeBannerComponent } from './banner/quake-banner.component';
 import { ResourcesComponent } from './resources/resources.component';
+import { TermsComponent } from './terms/terms.component';
 import { SyncEngineService } from './core/sync-engine.service';
 import { SeedService } from './core/seed.service';
 import type { FilterState } from './map/incident-layer.service';
@@ -25,6 +26,7 @@ import type { FilterState } from './map/incident-layer.service';
     IncidentDetailComponent,
     QuakeBannerComponent,
     ResourcesComponent,
+    TermsComponent,
   ],
   template: `
     <app-quake-banner />
@@ -35,6 +37,7 @@ import type { FilterState } from './map/incident-layer.service';
       (filters)="showFilters.set(true)"
       (legend)="showLegend.set(true)"
       (resources)="showResources.set(true)"
+      (terms)="showTerms.set(true)"
     />
 
     @if (showReport()) {
@@ -70,6 +73,10 @@ import type { FilterState } from './map/incident-layer.service';
       <app-resources (close)="showResources.set(false)" />
     }
 
+    @if (showTerms()) {
+      <app-terms (close)="showTerms.set(false)" />
+    }
+
     @if (selectedIncident()) {
       <app-incident-detail
         [incident]="selectedIncident()"
@@ -90,6 +97,7 @@ export class App {
   readonly showFilters = signal(false);
   readonly showLegend = signal(false);
   readonly showResources = signal(false);
+  readonly showTerms = signal(false);
   readonly duplicateId = signal('');
   readonly selectedIncident = signal<{ incidentId: string; type: string; confirmations: number; description?: string } | null>(null);
 
