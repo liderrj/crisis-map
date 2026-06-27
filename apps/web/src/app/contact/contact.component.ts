@@ -1,7 +1,6 @@
-import { Component, output, inject, signal, computed } from '@angular/core';
+import { Component, output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { I18nService } from '../core/i18n.service';
-import { DeviceIdService } from '../core/device-id.service';
 
 const CONTACT_EMAIL = 'arkemdigital@gmail.com';
 
@@ -23,7 +22,7 @@ interface SubjectOption {
       </header>
 
       <div class="cm-body">
-        <p class="cm-preview">{{ i18n.t('contact.preview', { email: CONTACT_EMAIL }) }}</p>
+        <p class="cm-preview">{{ i18n.t('contact.preview') }}</p>
 
         <label>{{ i18n.t('contact.subject') }}
           <select [(ngModel)]="subjectKey" (change)="updateBody()">
@@ -39,24 +38,16 @@ interface SubjectOption {
         </label>
 
         <details class="cm-advanced">
-          <summary>{{ advancedLabel }}</summary>
+          <summary>{{ i18n.t('contact.advanced') }}</summary>
           <label class="cm-inline-label">
-            <span>From (your alias)</span>
+            <span>{{ i18n.t('contact.alias') }}</span>
             <input type="text" [(ngModel)]="alias" maxlength="30" />
-          </label>
-          <label class="cm-inline-label">
-            <span>Device ID (auto-included)</span>
-            <input type="text" [value]="deviceId" readonly />
-          </label>
-          <label class="cm-inline-label">
-            <span>Language</span>
-            <input type="text" [value]="langLabelValue()" readonly />
           </label>
         </details>
       </div>
 
       <footer>
-        <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('contact.cancel') }}</button>
+        <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('common.cancel') }}</button>
         <a class="cm-btn cm-btn-primary" [href]="mailtoUrl()" target="_blank" rel="noopener" (click)="close.emit()">
           {{ i18n.t('contact.send') }}
         </a>
@@ -108,7 +99,6 @@ interface SubjectOption {
 })
 export class ContactComponent {
   readonly i18n = inject(I18nService);
-  private deviceSvc = inject(DeviceIdService);
   readonly close = output<void>();
 
   readonly subjects: SubjectOption[] = [
@@ -123,15 +113,6 @@ export class ContactComponent {
   readonly message = signal('');
   readonly alias = signal('');
 
-  readonly deviceId = this.deviceSvc.device().deviceId;
-  readonly langLabelValue = computed(() => {
-    const l = this.i18n.locale();
-    return l === 'es' ? 'Español' : l === 'en' ? 'English' : 'Português';
-  });
-  readonly advancedLabel = 'Detalles técnicos (opcional)';
-
-  readonly CONTACT_EMAIL = CONTACT_EMAIL;
-
   updateBody(): void {
     // Placeholder could be set per-subject; user edits the textarea anyway.
   }
@@ -143,8 +124,6 @@ export class ContactComponent {
   mailtoUrl(): string {
     const subject = encodeURIComponent(`[CrisisMap] ${this.subjectLabel()}`);
     const meta = [
-      `Idioma: ${this.langLabelValue()}`,
-      `Device ID: ${this.deviceId}`,
       this.alias() ? `Alias: ${this.alias()}` : '',
       `Locale: ${this.i18n.locale()}`,
       '',
