@@ -5,14 +5,22 @@ export interface DeviceContext {
   alias?: string;
 }
 
+function getHeader(headers: Record<string, string | undefined>, name: string): string | undefined {
+  const lower = name.toLowerCase();
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === lower) return headers[k];
+  }
+  return undefined;
+}
+
 export function extractDeviceContext(
   headers: Record<string, string | undefined>,
 ): DeviceContext | null {
-  const rawId = headers['deviceId'] ?? headers['deviceid'];
+  const rawId = getHeader(headers, 'deviceid');
   if (!rawId) return null;
   const deviceId = rawId.trim();
   if (!isValidDeviceId(deviceId)) return null;
-  const rawAlias = headers['alias'];
+  const rawAlias = getHeader(headers, 'alias');
   const alias = rawAlias ? rawAlias.trim().slice(0, MAX_ALIAS_LENGTH) || undefined : undefined;
   return { deviceId, alias };
 }

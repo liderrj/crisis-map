@@ -7,8 +7,8 @@ import { computeConfidence, type Incident } from '../../shared/types.js';
 import { jsonResponse, errorResponse } from '../../shared/headers.js';
 
 const MAX_BBOX_AREA_DEG2 = 25;
-const MAX_CELLS = 2000;
-const CONCURRENCY = 20;
+const MAX_CELLS = 4000;
+const CONCURRENCY = 50;
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   try {
@@ -25,7 +25,15 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return errorResponse(400, `bbox too large (max ${MAX_BBOX_AREA_DEG2} deg^2). Zoom in.`);
     }
 
-    const cells = bboxToGeohashCells(bounds).slice(0, MAX_CELLS);
+    const allCells = bboxToGeohashCells(bounds);
+    const centerLat = (bounds.minLat + bounds.maxLat) / 2;
+    const centerLng = (bounds.minLng + bounds.maxLng) / 2;
+    const sortedCells = allCells.slice().sort((a, b) => {
+      const da = a.charCodeAt(0) * 1000 + a.charCodeAt(1) - (centerLat * 10000 + centerLng * 10000);
+      const db = b.charCodeAt(0) * 1000 + b.charCodeAt(1) - (centerLat * 10000 + centerLng * 10000);
+      return Math.abs(da) - Math.abs(db);
+    });
+    const cells = sortedCells.slice(0, MAX_CELLS);
     const now = Math.floor(Date.now() / 1000);
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
 
@@ -78,7 +86,7 @@ async function queryCellsInParallel(cells: string[], concurrency: number): Promi
           new QueryCommand({
             TableName: TABLES.incidents,
             IndexName: 'geohash-createdAt-index',
-            KeyConditionExpression: 'begins_with(geohash, :gh)',
+            KeyConditionExpression: 'geohash = :gh',
             ExpressionAttributeValues: { ':gh': cell },
           }),
         );

@@ -14,6 +14,11 @@ export class CrisisMapStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    const seedToken = process.env.SEED_TOKEN ?? '';
+    if (!seedToken) {
+      throw new Error('SEED_TOKEN env var is required to deploy this stack');
+    }
+
     const incidents = new IncidentsTable(this, 'IncidentsTable');
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
     const devices = new DevicesTable(this, 'DevicesTable');
@@ -63,7 +68,7 @@ export class CrisisMapStack extends cdk.Stack {
     };
 
     const healthFn = mkLambda('Health', 'lambdas/health/handler.handler');
-    const getIncidentsFn = mkLambda('GetIncidents', 'lambdas/incidents/get-incidents.handler', 30);
+    const getIncidentsFn = mkLambda('GetIncidents', 'lambdas/incidents/get-incidents.handler', 60);
     const createIncidentFn = mkLambda('CreateIncident', 'lambdas/incidents/create-incident.handler');
     const confirmationsFn = mkLambda('Confirmations', 'lambdas/confirmations/handler.handler');
     const resourcesFn = mkLambda('Resources', 'lambdas/resources/handler.handler');
@@ -82,6 +87,17 @@ export class CrisisMapStack extends cdk.Stack {
     imagesFn.addToRolePolicy(sharedPolicy);
     imagesFn.addToRolePolicy(s3Policy);
 
+    const seedFn = new lambda.Function(this, 'Seed', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 512,
+      handler: 'lambdas/seed/handler.handler',
+      code: lambda.Code.fromAsset('../dist'),
+      environment: { ...baseEnv, SEED_TOKEN: seedToken },
+    });
+    seedFn.addToRolePolicy(sharedPolicy);
+
     const route = (method: string, path: string, fn: lambda.Function) => {
       new apigatewayv2.HttpRoute(this, `${method}${path}Route`, {
         httpApi: api.httpApi,
@@ -98,6 +114,7 @@ export class CrisisMapStack extends cdk.Stack {
     route('GET', '/resources', resourcesFn);
     route('GET', '/legend', legendFn);
     route('POST', '/sync', syncFn);
+    route('POST', '/seed', seedFn);
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url });
     new cdk.CfnOutput(this, 'ImageBucketName', { value: images.bucket.bucketName });

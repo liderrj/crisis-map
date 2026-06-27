@@ -6,7 +6,9 @@ import { LegendComponent } from './legend/legend.component';
 import { ReportFormComponent } from './report/report-form.component';
 import { DuplicatePromptComponent } from './report/duplicate-prompt.component';
 import { IncidentDetailComponent } from './incident/incident-detail.component';
+import { QuakeBannerComponent } from './banner/quake-banner.component';
 import { SyncEngineService } from './core/sync-engine.service';
+import { SeedService } from './core/seed.service';
 import type { FilterState } from './map/incident-layer.service';
 
 @Component({
@@ -20,8 +22,10 @@ import type { FilterState } from './map/incident-layer.service';
     ReportFormComponent,
     DuplicatePromptComponent,
     IncidentDetailComponent,
+    QuakeBannerComponent,
   ],
   template: `
+    <app-quake-banner />
     <app-map />
     <app-map-controls
       (report)="onReport()"
@@ -73,6 +77,7 @@ import type { FilterState } from './map/incident-layer.service';
 export class App {
   @ViewChild(MapComponent) mapComp?: MapComponent;
   private sync = inject(SyncEngineService);
+  private seed = inject(SeedService);
 
   readonly showReport = signal(false);
   readonly showFilters = signal(false);
@@ -82,6 +87,7 @@ export class App {
 
   constructor() {
     this.sync.start();
+    void this.seed.seedIfNeeded();
   }
 
   onReport(): void {

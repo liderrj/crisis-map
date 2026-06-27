@@ -1,7 +1,7 @@
 export type IncidentType =
   | 'people_trapped' | 'building_collapse' | 'damaged_building' | 'fire' | 'flood'
-  | 'road_blocked' | 'bridge_damaged' | 'landslide' | 'hospital' | 'shelter'
-  | 'food' | 'water' | 'medicine' | 'electricity' | 'fuel'
+  | 'road_blocked' | 'bridge_damaged' | 'landslide' | 'gas_leak'
+  | 'hospital' | 'shelter' | 'food' | 'water' | 'medicine' | 'electricity' | 'fuel'
   | 'internet' | 'starlink' | 'open_wifi' | 'charging_point' | 'other';
 
 export type IncidentCategory = 'emergency' | 'infrastructure' | 'service_interruption' | 'resource' | 'communications';
@@ -40,6 +40,7 @@ export const INCIDENT_TYPES: { type: IncidentType; label: string }[] = [
   { type: 'road_blocked', label: 'Road blocked' },
   { type: 'bridge_damaged', label: 'Bridge damaged' },
   { type: 'landslide', label: 'Landslide' },
+  { type: 'gas_leak', label: 'Gas leak' },
   { type: 'hospital', label: 'Hospital' },
   { type: 'shelter', label: 'Shelter' },
   { type: 'food', label: 'Food' },
@@ -75,7 +76,7 @@ export const CATEGORY_LABELS: Record<IncidentCategory, string> = {
 const TYPE_CATEGORY_MAP: Record<IncidentType, IncidentCategory> = {
   people_trapped: 'emergency', building_collapse: 'emergency', damaged_building: 'emergency',
   fire: 'emergency', flood: 'emergency', road_blocked: 'emergency', bridge_damaged: 'emergency',
-  landslide: 'emergency', electricity: 'infrastructure', fuel: 'service_interruption',
+  landslide: 'emergency', gas_leak: 'emergency', electricity: 'infrastructure', fuel: 'service_interruption',
   hospital: 'resource', shelter: 'resource', food: 'resource', water: 'resource', medicine: 'resource',
   internet: 'communications', starlink: 'communications', open_wifi: 'communications',
   charging_point: 'communications', other: 'emergency',

@@ -24,7 +24,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private debounceTimer?: ReturnType<typeof setTimeout>;
 
   ngAfterViewInit(): void {
-    this.map = L.map(this.mapEl.nativeElement, { zoomControl: false }).setView([0, 0], 13);
+    this.map = L.map(this.mapEl.nativeElement, { zoomControl: false }).setView([10.483, -66.833], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
@@ -35,7 +35,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.map.addLayer(this.clusterGroup);
 
     this.map.on('moveend zoomend', () => this.refresh());
-    this.locate();
     this.loadCached();
   }
 

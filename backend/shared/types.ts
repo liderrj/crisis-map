@@ -7,6 +7,7 @@ export type IncidentType =
   | 'road_blocked'
   | 'bridge_damaged'
   | 'landslide'
+  | 'gas_leak'
   | 'hospital'
   | 'shelter'
   | 'food'

@@ -145,11 +145,10 @@ export function bboxToGeohashCells(bbox: GeoBounds, precision = 7): string[] {
   const cellLng = 360 / Math.pow(2, lngBits);
   const cellLat = 180 / Math.pow(2, latBits);
 
-  // Sample at ~cellSize spacing (with slight overlap at edges). This does not
-  // strictly guarantee coverage at the cell border, but is fast and the
-  // server-side bbox filter catches incidents that fall in adjacent cells.
-  const stepLng = cellLng * 0.9;
-  const stepLat = cellLat * 0.9;
+  // Step must be smaller than the smaller cell dimension to cover every cell.
+  // For precision 7 this is ~0.0007° lat and ~0.0028° lng.
+  const stepLng = cellLng / 2;
+  const stepLat = cellLat / 2;
 
   const cells = new Set<string>();
   for (let lat = bbox.minLat; lat <= bbox.maxLat + 1e-9; lat += stepLat) {
@@ -157,7 +156,7 @@ export function bboxToGeohashCells(bbox: GeoBounds, precision = 7): string[] {
       cells.add(encodeGeohash(lat, lng, precision));
     }
   }
-  // Also include the 4 corners explicitly so the boundaries are covered.
+  // Include the 4 corners explicitly.
   cells.add(encodeGeohash(bbox.minLat, bbox.minLng, precision));
   cells.add(encodeGeohash(bbox.minLat, bbox.maxLng, precision));
   cells.add(encodeGeohash(bbox.maxLat, bbox.minLng, precision));

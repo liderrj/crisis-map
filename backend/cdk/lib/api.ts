@@ -20,6 +20,7 @@ export class CrisisMapApi extends Construct {
     this.httpApi.addStage('$default', {
       autoDeploy: true,
       throttle: { rateLimit: 100, burstLimit: 200 },
+      stageVariables: { timeoutInMillis: '60000' },
     });
   }
 
