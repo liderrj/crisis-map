@@ -48,35 +48,35 @@ export class CrisisMapStack extends cdk.Stack {
       IMAGE_BUCKET: images.bucket.bucketName,
     };
 
-    const mkLambda = (name: string, handler: string): lambda.Function => {
+    const mkLambda = (name: string, handler: string, timeoutSec = 15): lambda.Function => {
       const fn = new lambda.Function(this, name, {
         runtime: lambda.Runtime.NODEJS_20_X,
         architecture: lambda.Architecture.ARM_64,
-        timeout: cdk.Duration.seconds(15),
+        timeout: cdk.Duration.seconds(timeoutSec),
         memorySize: 512,
         handler,
-        code: lambda.Code.fromAsset('../dist/lambdas'),
+        code: lambda.Code.fromAsset('../dist'),
         environment: baseEnv,
       });
       fn.addToRolePolicy(sharedPolicy);
       return fn;
     };
 
-    const healthFn = mkLambda('Health', 'health/handler.handler');
-    const getIncidentsFn = mkLambda('GetIncidents', 'incidents/get-incidents.handler');
-    const createIncidentFn = mkLambda('CreateIncident', 'incidents/create-incident.handler');
-    const confirmationsFn = mkLambda('Confirmations', 'confirmations/handler.handler');
-    const resourcesFn = mkLambda('Resources', 'resources/handler.handler');
-    const legendFn = mkLambda('Legend', 'legend/handler.handler');
-    const syncFn = mkLambda('Sync', 'sync/handler.handler');
+    const healthFn = mkLambda('Health', 'lambdas/health/handler.handler');
+    const getIncidentsFn = mkLambda('GetIncidents', 'lambdas/incidents/get-incidents.handler', 30);
+    const createIncidentFn = mkLambda('CreateIncident', 'lambdas/incidents/create-incident.handler');
+    const confirmationsFn = mkLambda('Confirmations', 'lambdas/confirmations/handler.handler');
+    const resourcesFn = mkLambda('Resources', 'lambdas/resources/handler.handler');
+    const legendFn = mkLambda('Legend', 'lambdas/legend/handler.handler');
+    const syncFn = mkLambda('Sync', 'lambdas/sync/handler.handler');
 
     const imagesFn = new lambda.Function(this, 'Images', {
       runtime: lambda.Runtime.NODEJS_20_X,
       architecture: lambda.Architecture.ARM_64,
       timeout: cdk.Duration.seconds(15),
       memorySize: 512,
-      handler: 'images/handler.handler',
-      code: lambda.Code.fromAsset('../dist/lambdas'),
+      handler: 'lambdas/images/handler.handler',
+      code: lambda.Code.fromAsset('../dist'),
       environment: baseEnv,
     });
     imagesFn.addToRolePolicy(sharedPolicy);

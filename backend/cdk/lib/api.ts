@@ -9,6 +9,7 @@ export class CrisisMapApi extends Construct {
     super(scope, id);
 
     this.httpApi = new apigatewayv2.HttpApi(this, 'HttpApi', {
+      createDefaultStage: false,
       corsPreflight: {
         allowOrigins: ['*'],
         allowMethods: [apigatewayv2.CorsHttpMethod.GET, apigatewayv2.CorsHttpMethod.POST, apigatewayv2.CorsHttpMethod.OPTIONS],
@@ -16,14 +17,9 @@ export class CrisisMapApi extends Construct {
       },
     });
 
-    new apigatewayv2.CfnStage(this, 'DefaultStage', {
-      apiId: this.httpApi.apiId,
-      stageName: '$default',
+    this.httpApi.addStage('$default', {
       autoDeploy: true,
-      defaultRouteSettings: {
-        throttlingBurstLimit: 200,
-        throttlingRateLimit: 100,
-      },
+      throttle: { rateLimit: 100, burstLimit: 200 },
     });
   }
 
