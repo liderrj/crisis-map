@@ -75,6 +75,7 @@ export interface Device {
   deviceId: string;
   alias?: string;
   createdAt: number;
+  lastSeen?: number;
 }
 
 export interface IncidentCreateInput {

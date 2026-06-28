@@ -1,5 +1,5 @@
 import { Component, input, output, inject, signal, effect } from '@angular/core';
-import { ApiClientService } from '../core/api-client.service';
+import { ApiClientService, Confirmer } from '../core/api-client.service';
 import { StorageService } from '../core/storage.service';
 import { SyncEngineService } from '../core/sync-engine.service';
 import { I18nService } from '../core/i18n.service';
@@ -87,6 +87,29 @@ type IncidentInput = Incident & { __pending?: boolean };
           </div>
         }
 
+        <div class="cm-confirmers">
+          <h4 class="cm-confirmers-title">{{ i18n.t('incident.confirmers') }}</h4>
+          @if (loadingConfirmers()) {
+            <p class="cm-loading">{{ i18n.t('incident.loading') }}</p>
+          } @else if (confirmers().length === 0) {
+            <p class="cm-confirmers-empty">{{ i18n.t('incident.confirmers.empty') }}</p>
+          } @else {
+            <ul class="cm-confirmer-list">
+              @for (c of (showAllConfirmers() ? confirmers() : confirmers().slice(0, 5)); track c.deviceId) {
+                <li class="cm-confirmer-item">
+                  <span class="cm-confirmer-alias">{{ c.alias || '—' }}</span>
+                  <span class="cm-confirmer-action">{{ i18n.t('incident.action.' + c.action) }}</span>
+                  <span class="cm-confirmer-time">{{ formatTime(c.createdAt) }}</span>
+                </li>
+              }
+            </ul>
+            @if (confirmers().length > 5 && !showAllConfirmers()) {
+              <button class="cm-confirmers-more" (click)="showAllConfirmers.set(true)">
+                {{ i18n.t('incident.confirmers.showMore') }} ({{ confirmers().length - 5 }})</button>
+            }
+          }
+        </div>
+
         <h4>{{ i18n.t('incident.title') }}</h4>
         <div class="cm-verify">
           <button (click)="act('confirm')" [disabled]="isPending()">{{ i18n.t('incident.confirm') }}</button>
@@ -151,6 +174,17 @@ type IncidentInput = Incident & { __pending?: boolean };
     .cm-gmaps:hover { background: #3367d6; }
     .cm-waze { background: #33ccff; }
     .cm-waze:hover { background: #00b8e6; }
+    .cm-confirmers { padding: 0 18px; }
+    .cm-confirmers-title { margin: 16px 0 8px; font-size: 15px; }
+    .cm-confirmers-empty { color: #888; font-size: 13px; margin: 4px 0; }
+    .cm-confirmer-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    .cm-confirmer-item { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+    .cm-confirmer-item:last-child { border-bottom: none; }
+    .cm-confirmer-alias { font-weight: 700; color: #333; min-width: 80px; }
+    .cm-confirmer-action { color: #666; text-transform: lowercase; }
+    .cm-confirmer-time { color: #999; font-size: 11px; margin-left: auto; white-space: nowrap; }
+    .cm-confirmers-more { background: transparent; border: 1px solid #ccc; border-radius: 6px; padding: 6px 12px; font-size: 12px; color: #555; cursor: pointer; margin-top: 4px; }
+    .cm-confirmers-more:hover { background: #f5f5f5; }
     h4 { margin: 16px 18px 8px; font-size: 15px; }
     .cm-verify { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 18px; }
     .cm-verify button { padding: 14px; font-size: 15px; border: none; border-radius: 8px;
@@ -187,6 +221,9 @@ export class IncidentDetailComponent {
 
   readonly images = signal<string[]>([]);
   readonly loadingImages = signal(false);
+  readonly confirmers = signal<Confirmer[]>([]);
+  readonly loadingConfirmers = signal(false);
+  readonly showAllConfirmers = signal(false);
   readonly lightbox = signal('');
   readonly msg = signal('');
   private msgTimer?: ReturnType<typeof setTimeout>;
@@ -194,9 +231,13 @@ export class IncidentDetailComponent {
   constructor() {
     effect(() => {
       const id = this.incident()?.incidentId;
-      if (id) this.loadImages(id);
-      else {
+      if (id) {
+        this.loadImages(id);
+        this.loadConfirmers(id);
+      } else {
         this.images.set([]);
+        this.confirmers.set([]);
+        this.showAllConfirmers.set(false);
         this.lightbox.set('');
       }
     });
@@ -217,6 +258,20 @@ export class IncidentDetailComponent {
       this.images.set([]);
     } finally {
       this.loadingImages.set(false);
+    }
+  }
+
+  private async loadConfirmers(incidentId: string): Promise<void> {
+    this.loadingConfirmers.set(true);
+    try {
+      const list = await this.api.listConfirmations(incidentId);
+      if (this.incident()?.incidentId === incidentId) {
+        this.confirmers.set(list);
+      }
+    } catch {
+      // silently ignore — the section will just show the empty-state
+    } finally {
+      this.loadingConfirmers.set(false);
     }
   }
 

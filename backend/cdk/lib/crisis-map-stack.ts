@@ -34,6 +34,7 @@ export class CrisisMapStack extends cdk.Stack {
         'dynamodb:UpdateItem',
         'dynamodb:Query',
         'dynamodb:Scan',
+        'dynamodb:BatchGetItem',
       ],
       resources: [
         incidents.table.tableArn,
@@ -118,6 +119,7 @@ export class CrisisMapStack extends cdk.Stack {
     route('GET', '/incidents', getIncidentsFn);
     route('POST', '/incidents', createIncidentFn);
     route('POST', '/confirmations', confirmationsFn);
+    route('GET', '/confirmations', confirmationsFn);
     route('POST', '/images', imagesFn);
     route('GET', '/images', imagesFn);
     route('GET', '/resources', resourcesFn);

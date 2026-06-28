@@ -12,6 +12,13 @@ export interface IncidentQuery {
   etag?: string;
 }
 
+export interface Confirmer {
+  deviceId: string;
+  alias: string;
+  action: ConfirmationAction;
+  createdAt: number;
+}
+
 export interface IncidentsResponse {
   incidents: Incident[];
   etag?: string;
@@ -126,6 +133,24 @@ export class ApiClientService {
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data.keys) ? data.keys : [];
+  }
+
+  /**
+   * Server-side confirmation metadata for an incident: alias, action,
+   * and timestamp for every device that verified the report. Returns
+   * an empty array on any failure (offline, no confirmations yet,
+   * server error) so the detail UI can render gracefully.
+   */
+  async listConfirmations(incidentId: string): Promise<Confirmer[]> {
+    if (!this.isValidUuid(incidentId)) return [];
+    try {
+      const res = await fetch(`${this.base}/confirmations?incidentId=${encodeURIComponent(incidentId)}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data.confirmations) ? data.confirmations : [];
+    } catch {
+      return [];
+    }
   }
 
   async uploadImage(url: string, blob: Blob): Promise<boolean> {
