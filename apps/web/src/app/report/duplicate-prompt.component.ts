@@ -1,5 +1,6 @@
 import { Component, output, input, inject } from '@angular/core';
-import { ApiClientService } from '../core/api-client.service';
+import { StorageService } from '../core/storage.service';
+import { SyncEngineService } from '../core/sync-engine.service';
 import { I18nService } from '../core/i18n.service';
 
 @Component({
@@ -31,11 +32,28 @@ export class DuplicatePromptComponent {
   readonly incidentId = input.required<string>();
   readonly createNew = output<void>();
   readonly resolved = output<void>();
-  private api = inject(ApiClientService);
+  private storage = inject(StorageService);
+  private sync = inject(SyncEngineService);
   readonly i18n = inject(I18nService);
 
   async confirmExisting(): Promise<void> {
-    try { await this.api.confirm(this.incidentId(), 'confirm'); } catch { /* ignore */ }
+    // Always go through the outbox; sync engine will POST /sync later.
+    await this.storage.addOutbox({
+      id: crypto.randomUUID(),
+      op: 'confirm',
+      payload: { incidentId: this.incidentId(), action: 'confirm' },
+      createdAt: Date.now(),
+    });
+    // Optimistic local update.
+    const inc = await this.storage.getIncident(this.incidentId());
+    if (inc) {
+      await this.storage.putIncident({
+        ...inc,
+        confirmations: (inc.confirmations ?? 0) + 1,
+        updatedAt: Math.floor(Date.now() / 1000),
+      });
+    }
+    this.sync.scheduleSync();
     this.resolved.emit();
   }
 }

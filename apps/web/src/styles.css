@@ -7,15 +7,57 @@ app-root { display: block; position: fixed; inset: 0; }
 /* Leaflet popup overrides - high contrast for outdoors */
 .cm-marker-dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.6); }
 .leaflet-popup-content-wrapper { border-radius: 8px; }
-.cm-popup { font-size: 15px; min-width: 180px; }
-.cm-popup strong { display: inline-block; margin-right: 8px; }
-.cm-pop-sev { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: #333; color: #fff; }
+.leaflet-popup-content { margin: 12px 14px; min-width: 220px; max-width: 280px; }
+
+.cm-popup { font-size: 14px; min-width: 200px; }
+.cm-pop-header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.cm-pop-type { display: inline-block; font-size: 15px; font-weight: 700; flex: 1; min-width: 100px; }
+.cm-pop-sev { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; background: #333; color: #fff; text-transform: uppercase; }
 .cm-pop-sev.cm-sev-low { background: #2e7d32; }
-.cm-pop-sev.cm-sev-medium { background: #f9a825; }
+.cm-pop-sev.cm-sev-medium { background: #f9a825; color: #111; }
 .cm-pop-sev.cm-sev-high { background: #c62828; }
-.cm-pop-desc { margin: 8px 0; }
-.cm-pop-conf { font-weight: 700; color: #2e7d32; margin: 4px 0 8px; }
-.cm-pop-btn { padding: 8px 12px; border: none; border-radius: 6px; background: #1976d2; color: #fff; cursor: pointer; width: 100%; }
+.cm-pop-status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.cm-pop-status.cm-status-resolved { background: #e8f5e9; color: #2e7d32; }
+.cm-pop-status.cm-status-active { background: #e3f2fd; color: #1565c0; }
+.cm-pop-images { display: flex; gap: 4px; flex-wrap: wrap; margin: 6px 0; min-height: 0; }
+.cm-pop-images:empty { display: none; }
+.cm-pop-thumb { width: 72px; height: 72px; object-fit: cover; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
+.cm-pop-desc { margin: 6px 0; line-height: 1.35; color: #222; }
+.cm-pop-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; color: #555; font-size: 12px; }
+.cm-pop-conf { font-weight: 700; color: #2e7d32; }
+.cm-pop-sep { opacity: .5; }
+.cm-pop-time { color: #888; }
+.cm-pop-by { margin: 4px 0 0; font-size: 12px; color: #666; }
+.cm-pop-more { display: block; width: 100%; margin-top: 8px; padding: 8px 12px; border: none;
+  border-radius: 6px; background: #1976d2; color: #fff; cursor: pointer; font-size: 14px; font-weight: 600; }
+.cm-pop-more:hover { background: #1565c0; }
 
 /* Make Leaflet controls larger for outdoor tap targets */
 .leaflet-control-zoom a { width: 40px !important; height: 40px !important; line-height: 40px !important; font-size: 22px !important; }
+.leaflet-top.leaflet-right .leaflet-control-zoom { margin-top: 12px !important; margin-right: 12px !important; box-shadow: 0 2px 6px rgba(0,0,0,.3); border-radius: 6px !important; overflow: hidden; }
+
+/* Pending incident marker — pulsing ring */
+.cm-marker-pending-icon .cm-marker-wrap { position: relative; width: 32px; height: 32px; }
+.cm-marker-pending-icon .cm-marker-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 193, 7, .35);
+  animation: cm-pending-pulse 1.6s ease-out infinite;
+  pointer-events: none;
+}
+.cm-marker-pending-icon .cm-marker-dot {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 18px; height: 18px;
+}
+@keyframes cm-pending-pulse {
+  0%   { transform: scale(.6); opacity: .8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Pending badge inside the popup */
+.cm-pop-pending {
+  background: #fff8e1; color: #5d4037;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 4px;
+  margin-bottom: 6px; align-self: flex-start;
+}
