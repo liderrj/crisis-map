@@ -6,5 +6,5 @@ export const environment = {
   // construct). Leaflet's tile layer reads this with the standard
   // {z}/{x}/{y} placeholders. The Service Worker caches requests to
   // this domain so the map works offline.
-  tileUrl: 'https://d2x4k8j7a9s3.cloudfront.net/tiles/{z}/{x}/{y}.png',
+  tileUrl: 'https://d2uihsxid1uof0.cloudfront.net/tiles/{z}/{x}/{y}.png',
 };
