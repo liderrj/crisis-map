@@ -40,7 +40,7 @@ export class TileStorage extends Construct {
       cors: [
         {
           allowedMethods: [s3.HttpMethods.GET],
-          allowedOrigins: ['*'],
+          allowedOrigins: ['https://erqk-crisis-map.netlify.app'],
           allowedHeaders: ['*'],
           maxAge: 300,
         },

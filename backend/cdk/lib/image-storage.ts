@@ -19,7 +19,7 @@ export class ImageStorage extends Construct {
       cors: [
         {
           allowedMethods: [s3.HttpMethods.PUT, s3.HttpMethods.GET],
-          allowedOrigins: ['*'],
+          allowedOrigins: ['https://erqk-crisis-map.netlify.app'],
           allowedHeaders: ['Content-Type', 'Content-Length', 'x-amz-content-sha256'],
           maxAge: 300,
         },

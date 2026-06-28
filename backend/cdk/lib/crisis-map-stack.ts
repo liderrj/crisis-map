@@ -20,6 +20,11 @@ export class CrisisMapStack extends cdk.Stack {
       throw new Error('SEED_TOKEN env var is required to deploy this stack');
     }
 
+    const contactEmail = process.env.CONTACT_EMAIL ?? '';
+    if (!contactEmail) {
+      throw new Error('CONTACT_EMAIL env var is required to deploy this stack');
+    }
+
     const incidents = new IncidentsTable(this, 'IncidentsTable');
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
     const devices = new DevicesTable(this, 'DevicesTable');
@@ -52,6 +57,11 @@ export class CrisisMapStack extends cdk.Stack {
     const s3ListPolicy = new iam.PolicyStatement({
       actions: ['s3:ListBucket'],
       resources: [images.bucket.bucketArn],
+    });
+
+    const sesPolicy = new iam.PolicyStatement({
+      actions: ['ses:SendEmail'],
+      resources: ['*'],
     });
 
     const baseEnv = {
@@ -107,6 +117,17 @@ export class CrisisMapStack extends cdk.Stack {
     });
     seedFn.addToRolePolicy(sharedPolicy);
 
+    const contactFn = new lambda.Function(this, 'Contact', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 512,
+      handler: 'lambdas/contact/handler.handler',
+      code: lambda.Code.fromAsset('../dist'),
+      environment: { ...baseEnv, CONTACT_EMAIL: contactEmail },
+    });
+    contactFn.addToRolePolicy(sesPolicy);
+
     const route = (method: string, path: string, fn: lambda.Function) => {
       new apigatewayv2.HttpRoute(this, `${method}${path}Route`, {
         httpApi: api.httpApi,
@@ -126,6 +147,7 @@ export class CrisisMapStack extends cdk.Stack {
     route('GET', '/legend', legendFn);
     route('POST', '/sync', syncFn);
     route('POST', '/seed', seedFn);
+    route('POST', '/contact', contactFn);
 
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url });
     new cdk.CfnOutput(this, 'ImageBucketName', { value: images.bucket.bucketName });

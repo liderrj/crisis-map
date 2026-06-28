@@ -62,6 +62,19 @@ export class ApiClientService {
     return h;
   }
 
+  async sendContact(payload: { subject: string; message: string; alias?: string; locale?: string }): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.base}/contact`, {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
   async health(): Promise<boolean> {
     try {
       const res = await fetch(`${this.base}/health`);

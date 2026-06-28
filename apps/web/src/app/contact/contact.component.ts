@@ -1,8 +1,8 @@
 import { Component, output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { I18nService } from '../core/i18n.service';
-
-const CONTACT_EMAIL = 'arkemdigital@gmail.com';
+import { ApiClientService } from '../core/api-client.service';
+import { DeviceIdService } from '../core/device-id.service';
 
 interface SubjectOption {
   key: string;
@@ -22,35 +22,47 @@ interface SubjectOption {
       </header>
 
       <div class="cm-body">
-        <p class="cm-preview">{{ i18n.t('contact.preview') }}</p>
+        @if (status() === 'sent') {
+          <p class="cm-success">{{ i18n.t('contact.sent') }}</p>
+        } @else {
+          <p class="cm-preview">{{ i18n.t('contact.preview') }}</p>
 
-        <label>{{ i18n.t('contact.subject') }}
-          <select [(ngModel)]="subjectKey" (change)="updateBody()">
-            @for (s of subjects; track s.key) {
-              <option [value]="s.key">{{ i18n.t(s.key) || s.fallback }}</option>
-            }
-          </select>
-        </label>
-
-        <label>{{ i18n.t('contact.message') }}
-          <textarea [(ngModel)]="message" (ngModelChange)="onMessageChange()" rows="6"
-            [placeholder]="i18n.t('contact.message.placeholder')"></textarea>
-        </label>
-
-        <details class="cm-advanced">
-          <summary>{{ i18n.t('contact.advanced') }}</summary>
-          <label class="cm-inline-label">
-            <span>{{ i18n.t('contact.alias') }}</span>
-            <input type="text" [(ngModel)]="alias" maxlength="30" />
+          <label>{{ i18n.t('contact.subject') }}
+            <select [(ngModel)]="subjectKey">
+              @for (s of subjects; track s.key) {
+                <option [value]="s.key">{{ i18n.t(s.key) || s.fallback }}</option>
+              }
+            </select>
           </label>
-        </details>
+
+          <label>{{ i18n.t('contact.message') }}
+            <textarea [(ngModel)]="message" rows="6"
+              [placeholder]="i18n.t('contact.message.placeholder')"></textarea>
+          </label>
+
+          <details class="cm-advanced">
+            <summary>{{ i18n.t('contact.advanced') }}</summary>
+            <label class="cm-inline-label">
+              <span>{{ i18n.t('contact.alias') }}</span>
+              <input type="text" [(ngModel)]="alias" maxlength="30" />
+            </label>
+          </details>
+
+          @if (status() === 'error') {
+            <p class="cm-error">{{ i18n.t('contact.error') }}</p>
+          }
+        }
       </div>
 
       <footer>
-        <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('common.cancel') }}</button>
-        <a class="cm-btn cm-btn-primary" [href]="mailtoUrl()" target="_blank" rel="noopener" (click)="close.emit()">
-          {{ i18n.t('contact.send') }}
-        </a>
+        @if (status() === 'sent') {
+          <button class="cm-btn cm-btn-primary" (click)="close.emit()">{{ i18n.t('contact.close') }}</button>
+        } @else {
+          <button class="cm-btn cm-btn-ghost" (click)="close.emit()">{{ i18n.t('common.cancel') }}</button>
+          <button class="cm-btn cm-btn-primary" (click)="send()" [disabled]="status() === 'sending'">
+            {{ status() === 'sending' ? i18n.t('contact.sending') : i18n.t('contact.send') }}
+          </button>
+        }
       </footer>
     </div>
   `,
@@ -75,6 +87,14 @@ interface SubjectOption {
       background: #e0f7fa; color: #006064; padding: 10px 12px;
       border-radius: 6px; font-size: 13px; margin: 0;
     }
+    .cm-success {
+      background: #e6f7e6; color: #1b5e20; padding: 20px 16px;
+      border-radius: 6px; font-size: 15px; text-align: center; margin: 0;
+    }
+    .cm-error {
+      background: #fdecea; color: #b71c1c; padding: 10px 12px;
+      border-radius: 6px; font-size: 13px; margin: 0;
+    }
     label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
     label.cm-inline-label { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; }
     label.cm-inline-label span { min-width: 110px; font-weight: 600; }
@@ -94,11 +114,14 @@ interface SubjectOption {
       border: none; border-radius: 6px; cursor: pointer; text-align: center;
       text-decoration: none; display: inline-block; }
     .cm-btn-primary { background: #00838f; color: #fff; }
+    .cm-btn-primary:disabled { opacity: 0.6; cursor: default; }
     .cm-btn-ghost { background: transparent; color: #c62828; border: 1px solid #c62828; }
   `],
 })
 export class ContactComponent {
   readonly i18n = inject(I18nService);
+  readonly api = inject(ApiClientService);
+  readonly device = inject(DeviceIdService);
   readonly close = output<void>();
 
   readonly subjects: SubjectOption[] = [
@@ -112,24 +135,21 @@ export class ContactComponent {
   readonly subjectKey = signal('contact.subject.bug');
   readonly message = signal('');
   readonly alias = signal('');
+  readonly status = signal<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
-  updateBody(): void {
-    // Placeholder could be set per-subject; user edits the textarea anyway.
-  }
+  async send(): Promise<void> {
+    if (this.status() === 'sending') return;
+    const msg = this.message().trim();
+    if (!msg) return;
 
-  onMessageChange(): void {
-    // No-op; just to keep ngModelChange wiring consistent.
-  }
-
-  mailtoUrl(): string {
-    const subject = encodeURIComponent(`[CrisisMap] ${this.subjectLabel()}`);
-    const meta = [
-      this.alias() ? `Alias: ${this.alias()}` : '',
-      `Locale: ${this.i18n.locale()}`,
-      '',
-    ].filter(Boolean).join('\n');
-    const body = encodeURIComponent(`${meta}${this.message()}`);
-    return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+    this.status.set('sending');
+    const ok = await this.api.sendContact({
+      subject: this.subjectLabel(),
+      message: msg,
+      alias: this.device.device().alias || this.alias().trim() || undefined,
+      locale: this.i18n.locale(),
+    });
+    this.status.set(ok ? 'sent' : 'error');
   }
 
   private subjectLabel(): string {

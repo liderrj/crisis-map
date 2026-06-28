@@ -28,7 +28,12 @@ export function extractDeviceContext(
 export function jsonResponse(statusCode: number, body: unknown) {
   return {
     statusCode,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    },
     body: JSON.stringify(body),
   };
 }

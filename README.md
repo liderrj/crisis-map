@@ -179,6 +179,14 @@ variables or AWS Secrets Manager.
 The backend uses a `SEED_TOKEN` environment variable (Lambda env) to gate the
 seed endpoint; rotate it before exposing the API publicly.
 
+> **Security model**: CrisisMap has no authentication. Every request is
+> attributed to a client-generated `deviceId` (UUID v4) sent as a header.
+> Anyone can submit incidents and confirmations from any deviceId. This is
+> by design — zero-friction identity per the project constitution (§II) —
+> and means the API is inherently public. Rate limiting (100 req/s
+> account-wide) and seed-token gating on `/seed` are the only access
+> controls.
+
 ## Deployment
 
 ### Backend (AWS CDK)
