@@ -144,6 +144,9 @@ npm run start
 # Build for production
 npm run build:web
 
+# Regenerate PWA icons (apps/web/public/icons/icon-192.png + icon-512.png)
+node apps/web/scripts/generate-icons.js
+
 # Backend: synthesize the CDK stack
 npm run cdk:synth
 
