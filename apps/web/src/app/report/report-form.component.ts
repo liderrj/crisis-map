@@ -152,7 +152,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   private leafletMap?: L.Map;
   private marker?: L.Marker;
 
-  type: IncidentType = 'other';
+  type: IncidentType = 'people_trapped';
   severity: Severity = 'medium';
   description = '';
   customType = '';
