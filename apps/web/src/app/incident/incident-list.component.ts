@@ -8,6 +8,12 @@ const PAGE_SIZE = 20;
 const RANGES = [1, 5, 10, 25, 50, 0] as const;
 type RangeKm = (typeof RANGES)[number];
 
+// Caracas / La Guaira center. Used ONLY as a last-resort fallback
+// when the user has denied location permission AND we have no other
+// option. When this fallback fires, the list clearly shows it so the
+// user can re-try.
+const FALLBACK_LOCATION = { lat: 10.483, lng: -66.833 };
+
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -40,6 +46,15 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
           </button>
         }
       </div>
+
+      @if (usingFallbackLocation()) {
+        <div class="cm-list-warning" role="alert">
+          <p>{{ i18n.t('list.fallbackWarning') }}</p>
+          <button class="cm-list-retry" (click)="retryLocation()">
+            {{ i18n.t('list.retryLocation') }}
+          </button>
+        </div>
+      }
 
       @if (locating()) {
         <p class="cm-list-status">{{ i18n.t('list.locating') }}</p>
@@ -99,6 +114,15 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
     .cm-range-btn.active { background: #1976d2; color: #fff; border-color: #1976d2; }
     .cm-list-status { padding: 40px 18px; text-align: center; color: #888;
       font-size: 15px; flex: 1; }
+    .cm-list-warning { display: flex; flex-direction: column; gap: 8px;
+      margin: 0 18px 8px; padding: 10px 12px; background: #fff8e1;
+      border-left: 4px solid #f57f17; border-radius: 4px; color: #5d4037;
+      font-size: 13px; flex: 0 0 auto; }
+    .cm-list-warning p { margin: 0; }
+    .cm-list-retry { align-self: flex-start; padding: 6px 14px; font-size: 13px;
+      font-weight: 600; border: none; border-radius: 6px; background: #f57f17;
+      color: #fff; cursor: pointer; }
+    .cm-list-retry:hover { background: #e65100; }
     .cm-list-items { flex: 1; overflow-y: auto; padding: 0 18px; }
     .cm-list-item { display: flex; gap: 12px; width: 100%; padding: 12px 0;
       border: none; border-bottom: 1px solid #eee; background: transparent;
@@ -144,9 +168,14 @@ export class IncidentListComponent {
   readonly ranges: RangeKm[] = [...RANGES];
   readonly range = signal<RangeKm>(10);
   readonly locating = signal(true);
+  /** True when we had to fall back to the disaster-zone center
+   *  because the user denied or blocked geolocation. We surface this
+   *  in the UI so the user understands why the list shows disasters
+   *  "near" them even when they're far away. */
+  readonly usingFallbackLocation = signal(false);
   readonly allIncidents = signal<(Incident & { __pending?: boolean; _dist: number })[]>([]);
   readonly page = signal(1);
-  private position: { lat: number; lng: number } = { lat: 10.483, lng: -66.833 };
+  private position: { lat: number; lng: number } = FALLBACK_LOCATION;
   private observer?: IntersectionObserver;
 
 
@@ -170,8 +199,9 @@ export class IncidentListComponent {
 
   private async load(): Promise<void> {
     this.locating.set(true);
-    const pos = await this.getPosition();
+    const { pos, fellBack } = await this.getPosition();
     this.position = pos;
+    this.usingFallbackLocation.set(fellBack);
 
     const cached = await this.storage.getCachedIncidents();
     const pending = await this.layer.getPendingIncidents();
@@ -279,15 +309,31 @@ export class IncidentListComponent {
     URL.revokeObjectURL(url);
   }
 
-  private getPosition(): Promise<{ lat: number; lng: number }> {
+  private getPosition(): Promise<{ pos: { lat: number; lng: number }; fellBack: boolean }> {
     return new Promise((resolve) => {
-      if (!navigator.geolocation) return resolve({ lat: 10.483, lng: -66.833 });
+      // No geolocation API at all (e.g. desktop browser without
+      // location services). Fall back to the disaster-zone center so
+      // the list is still usable; the UI surfaces this fact.
+      if (!('geolocation' in navigator)) {
+        resolve({ pos: FALLBACK_LOCATION, fellBack: true });
+        return;
+      }
       navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        () => resolve({ lat: 10.483, lng: -66.833 }),
+        (p) => resolve({ pos: { lat: p.coords.latitude, lng: p.coords.longitude }, fellBack: false }),
+        // User denied permission, timeout, or position unavailable.
+        // Same fallback as above, flagged so the UI can say "we're
+        // using the disaster-zone center; share your location to get
+        // accurate distances".
+        () => resolve({ pos: FALLBACK_LOCATION, fellBack: true }),
         { enableHighAccuracy: true, timeout: 8000 },
       );
     });
+  }
+
+  /** Re-try getting the GPS position (e.g. after the user grants
+   *  permission from the browser prompt). */
+  retryLocation(): void {
+    void this.load();
   }
 
   ngOnDestroy(): void {
