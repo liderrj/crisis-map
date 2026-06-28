@@ -1,6 +1,6 @@
 import { Component, ElementRef, ViewChild, AfterViewInit, OnDestroy, inject, signal, output } from '@angular/core';
 import * as L from 'leaflet';
-import 'leaflet.markercluster';
+import type {} from 'leaflet.markercluster';
 import { IncidentLayerService, type FilterState } from './incident-layer.service';
 import { incidentMarkerIcon, incidentPopupNode, renderPopupImages, pendingMarkerIcon } from './marker-style';
 import { I18nService } from '../core/i18n.service';
