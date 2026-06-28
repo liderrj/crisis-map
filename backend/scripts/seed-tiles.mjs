@@ -45,8 +45,18 @@ async function* walk(dir) {
 }
 
 async function uploadFile(localPath, relPath) {
-  // relPath looks like "11/523/632.png" — upload as "tiles/11/523/632.png"
-  const key = `tiles/${relPath.split(/[\\/]/).join('/')}`;
+  // relPath can look like either:
+  //   "altamira/11/523/632.png" (grouped per zone, as produced by
+  //     generate-tiles-direct.mjs), or
+  //   "11/523/632.png" (flat, as produced by the OpenMapTiles pipeline).
+  // In both cases we want the S3 key to be "tiles/{z}/{x}/{y}.png"
+  // because the frontend tileUrl template doesn't include a zone
+  // prefix. So we drop the first segment if it doesn't look like a
+  // zoom level.
+  const parts = relPath.split(/[\\/]/);
+  const firstLooksLikeZoom = /^\d+$/.test(parts[0]);
+  const leaf = firstLooksLikeZoom ? parts : parts.slice(1);
+  const key = `tiles/${leaf.join('/')}`;
   const body = await readFile(localPath);
   const contentType = relPath.endsWith('.png') ? 'image/png'
     : relPath.endsWith('.webp') ? 'image/webp'
@@ -56,7 +66,7 @@ async function uploadFile(localPath, relPath) {
     Bucket: BUCKET,
     Key: key,
     Body: body,
-    ContentType,
+    ContentType: contentType,
     CacheControl: 'public, max-age=31536000, immutable',
   }));
 }
@@ -92,7 +102,8 @@ async function main() {
         uploaded++;
       } catch (err) {
         failed++;
-        console.error(`  ✗ ${file}: ${err.message ?? err}`);
+        console.error(`  ✗ ${file}: ${err.message ?? err.name ?? JSON.stringify(err)}`);
+        if (failed === 1) console.error(err);
       }
       if ((uploaded + failed) % 50 === 0) {
         const elapsed = ((Date.now() - start) / 1000).toFixed(1);
