@@ -1,13 +1,10 @@
 import { Component, output, signal, inject } from '@angular/core';
 import { I18nService } from '../core/i18n.service';
 
-const STORAGE_KEY = 'crisismap_terms_v1';
-
 @Component({
   selector: 'app-terms',
   standalone: true,
   template: `
-    @if (visible()) {
       <div class="cm-backdrop" role="dialog" aria-modal="true" aria-labelledby="terms-title">
         <div class="cm-terms">
           <header>
@@ -276,7 +273,6 @@ const STORAGE_KEY = 'crisismap_terms_v1';
           </footer>
         </div>
       </div>
-    }
   `,
   styles: [`
     .cm-backdrop {
@@ -336,12 +332,6 @@ export class TermsComponent {
   readonly i18n = inject(I18nService);
   readonly close = output<void>();
   readonly accepted = signal(false);
-  readonly visible = signal(this.shouldShow());
-
-  private shouldShow(): boolean {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(STORAGE_KEY) !== 'accepted';
-  }
 
   toggleAccept(e: Event): void {
     this.accepted.set((e.target as HTMLInputElement).checked);
@@ -349,9 +339,6 @@ export class TermsComponent {
 
   onAccept(): void {
     if (!this.accepted()) return;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, 'accepted');
-    }
     this.close.emit();
   }
 
