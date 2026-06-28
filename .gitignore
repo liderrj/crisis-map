@@ -45,3 +45,15 @@ bundle/
 
 # Local-only CDK artifacts
 cdk.context.local.json
+
+# Generated OSM tile cache (~10 MB, regenerated via
+# backend/scripts/generate-tiles-direct.mjs when zones change)
+tiles-out/
+
+# DynamoDB local files (sam local, dynamodb-local Docker, etc.)
+.dynamodb/
+*.dynamodb
+
+# Personal / machine-specific dev scripts
+.specify/start-ng.ps1
+.specify/start-ng-serve.ps1

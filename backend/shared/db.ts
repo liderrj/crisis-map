@@ -11,9 +11,6 @@ export const TABLES = {
   devices: process.env.DEVICES_TABLE ?? 'Devices',
 };
 
-/** Fixed partition key value for the geo-index GSI. All rows share it. */
-export const GEO_INDEX_PK = 'incident';
-
 export async function getItem<T = Record<string, unknown>>(
   tableName: string,
   key: Record<string, unknown>,

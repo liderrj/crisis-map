@@ -2,13 +2,13 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda
 import { docClient, TABLES } from '../../shared/db.js';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { parseBbox, coverBbox } from '../../shared/geo.js';
-import { GEO_INDEX_PK } from '../../shared/db.js';
 import { categoryForType } from '../../shared/constants.js';
 import { computeConfidence, type Incident } from '../../shared/types.js';
 import { jsonResponse, errorResponse } from '../../shared/headers.js';
+import { cacheGet, cacheSet } from '../../shared/cache.js';
 
 const MAX_BBOX_AREA_DEG2 = 25;
-const CONCURRENCY = 50;
+const SHARD_CONCURRENCY = 10;
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   try {
@@ -25,36 +25,22 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return errorResponse(400, `bbox too large (max ${MAX_BBOX_AREA_DEG2} deg^2). Zoom in.`);
     }
 
-    // Use precision 6 for performance (precision 7 produces 5× more prefixes
-    // without noticeable accuracy improvement for crisis response).
     const prefixes = coverBbox(bounds, 6);
     const now = Math.floor(Date.now() / 1000);
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
-
     const typeFilter = qs.type ? qs.type.split(',') : undefined;
     const confirmedOnly = qs.confirmedOnly === 'true';
     const includeHidden = qs.includeHidden === 'true';
 
-    const results = await queryPrefixesInParallel(prefixes, CONCURRENCY);
-    const seen = new Set<string>();
-    const incidents: Incident[] = [];
-    for (const item of results) {
-      if (seen.has(item.incidentId)) continue;
-      seen.add(item.incidentId);
+    const cacheKey = `${bbox}|${qs.type ?? ''}|${confirmedOnly}|${includeHidden}|${limit}`;
 
-      if (!includeHidden && (item.status === 'resolved' || item.expiresAt < now)) continue;
-      if (typeFilter && !typeFilter.includes(item.type)) continue;
-      if (confirmedOnly && item.confirmations < 2) continue;
-      if (
-        item.location.lat < bounds.minLat ||
-        item.location.lat > bounds.maxLat ||
-        item.location.lng < bounds.minLng ||
-        item.location.lng > bounds.maxLng
-      )
-        continue;
-
-      incidents.push(item);
-      if (incidents.length >= limit) break;
+    let incidents = cacheGet<Incident[]>(cacheKey);
+    if (!incidents) {
+      incidents = await queryIncidents(
+        prefixes, limit, now, bounds,
+        typeFilter, confirmedOnly, includeHidden,
+      );
+      cacheSet(cacheKey, incidents);
     }
 
     return jsonResponse(200, {
@@ -70,27 +56,87 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   }
 };
 
-async function queryPrefixesInParallel(prefixes: string[], concurrency: number): Promise<Incident[]> {
-  const results: Incident[] = [];
-  for (let i = 0; i < prefixes.length; i += concurrency) {
-    const batch = prefixes.slice(i, i + concurrency);
-    const res = await Promise.all(
-      batch.map(async (prefix) => {
+function groupPrefixesByShard(prefixes: string[]): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const p of prefixes) {
+    const shard = p[0];
+    if (!map.has(shard)) map.set(shard, []);
+    map.get(shard)!.push(p);
+  }
+  return map;
+}
+
+function rangeForPrefix(prefix: string): { min: string; max: string } {
+  const padLen = 7 - prefix.length;
+  return {
+    min: prefix + '0'.repeat(padLen),
+    max: prefix + 'z'.repeat(padLen),
+  };
+}
+
+async function queryIncidents(
+  prefixes: string[],
+  limit: number,
+  now: number,
+  bounds: { minLat: number; minLng: number; maxLat: number; maxLng: number },
+  typeFilter: string[] | undefined,
+  confirmedOnly: boolean | undefined,
+  includeHidden: boolean | undefined,
+): Promise<Incident[]> {
+  const seen = new Set<string>();
+  const incidents: Incident[] = [];
+
+  const shardMap = groupPrefixesByShard(prefixes);
+  const shardEntries = [...shardMap.entries()];
+
+  for (let i = 0; i < shardEntries.length && incidents.length < limit; i += SHARD_CONCURRENCY) {
+    const batch = shardEntries.slice(i, i + SHARD_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async ([shard, shardPrefixes]) => {
+        shardPrefixes.sort();
+        const overallMin = rangeForPrefix(shardPrefixes[0]).min;
+        const overallMax = rangeForPrefix(shardPrefixes[shardPrefixes.length - 1]).max;
+
         const r = await docClient.send(
           new QueryCommand({
             TableName: TABLES.incidents,
-            IndexName: 'geo-index',
-            KeyConditionExpression: 'gsiPk = :pk AND begins_with(geohash, :prefix)',
+            IndexName: 'geo-index-v2',
+            KeyConditionExpression: 'gsiPkV2 = :shard AND geohash BETWEEN :min AND :max',
+            FilterExpression: includeHidden ? undefined : '#s <> :resolved AND expiresAt > :now',
+            ExpressionAttributeNames: includeHidden ? undefined : { '#s': 'status' },
             ExpressionAttributeValues: {
-              ':pk': GEO_INDEX_PK,
-              ':prefix': prefix,
+              ':shard': shard,
+              ':min': overallMin,
+              ':max': overallMax,
+              ...(includeHidden ? {} : { ':resolved': 'resolved', ':now': now }),
             },
+            ProjectionExpression: 'incidentId,#s,type,category,severity,location,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,description',
           }),
         );
         return (r.Items ?? []) as Incident[];
       }),
     );
-    for (const arr of res) results.push(...arr);
+
+    for (const items of results) {
+      for (const item of items) {
+        if (seen.has(item.incidentId)) continue;
+        seen.add(item.incidentId);
+
+        if (!includeHidden && (item.status === 'resolved' || item.expiresAt < now)) continue;
+        if (typeFilter && !typeFilter.includes(item.type)) continue;
+        if (confirmedOnly && item.confirmations < 2) continue;
+        if (
+          item.location.lat < bounds.minLat ||
+          item.location.lat > bounds.maxLat ||
+          item.location.lng < bounds.minLng ||
+          item.location.lng > bounds.maxLng
+        ) continue;
+
+        incidents.push(item);
+        if (incidents.length >= limit) return incidents;
+      }
+    }
   }
-  return results;
+
+  return incidents;
 }

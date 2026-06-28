@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { randomUUID } from 'node:crypto';
-import { docClient, TABLES, putItem, GEO_INDEX_PK } from '../../shared/db.js';
+import { docClient, TABLES, putItem } from '../../shared/db.js';
 import { QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
 import { isValidIncidentType, isValidSeverity, categoryForType } from '../../shared/constants.js';
@@ -70,7 +70,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     confirmations: 1,
     negativeVotes: 0,
     imageCount: input.imageCount,
-    gsiPk: GEO_INDEX_PK,
+    gsiPkV2: geohash[0],
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
@@ -108,21 +108,24 @@ async function findDuplicate(
   lng: number,
 ): Promise<Incident | null> {
   const cells = geohashNeighbours(geohash);
-  for (const cell of cells) {
-    const res = await docClient.send(
-      new QueryCommand({
-        TableName: TABLES.incidents,
-        IndexName: 'type-geohash-index',
-        KeyConditionExpression: '#t = :t AND begins_with(geohash, :gh)',
-        FilterExpression: '#s = :status',
-        ExpressionAttributeNames: { '#t': 'type', '#s': 'status' },
-        ExpressionAttributeValues: { ':t': type, ':gh': cell, ':status': 'active' },
-      }),
-    );
-    if (!res.Items) continue;
-    for (const item of res.Items as Incident[]) {
-      const dist = haversineMeters(lat, lng, item.location.lat, item.location.lng);
-      if (dist <= DUPLICATE_RADIUS_METERS) return item;
+  const results = await Promise.all(
+    cells.map(async (cell) => {
+      const res = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.incidents,
+          IndexName: 'type-geohash-index',
+          KeyConditionExpression: '#t = :t AND begins_with(geohash, :gh)',
+          FilterExpression: '#s = :status',
+          ExpressionAttributeNames: { '#t': 'type', '#s': 'status' },
+          ExpressionAttributeValues: { ':t': type, ':gh': cell, ':status': 'active' },
+        }),
+      );
+      return (res.Items ?? []) as Incident[];
+    }),
+  );
+  for (const items of results) {
+    for (const item of items) {
+      if (haversineMeters(lat, lng, item.location.lat, item.location.lng) <= DUPLICATE_RADIUS_METERS) return item;
     }
   }
   return null;

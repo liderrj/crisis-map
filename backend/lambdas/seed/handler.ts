@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { docClient, TABLES, GEO_INDEX_PK, putItem } from '../../shared/db.js';
+import { docClient, TABLES, putItem } from '../../shared/db.js';
 import { randomUUID } from 'node:crypto';
 import { encodeGeohash } from '../../shared/geo.js';
 import { isValidIncidentType, isValidSeverity, categoryForType } from '../../shared/constants.js';
@@ -71,7 +71,6 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       const alias = seed.alias ? seed.alias.slice(0, MAX_ALIAS_LENGTH) : 'system';
 
       const incident: Incident = {
-        gsiPk: GEO_INDEX_PK,
         incidentId,
         type: seed.type,
         category: categoryForType(seed.type),
@@ -79,6 +78,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         status: 'active',
         location: seed.location,
         geohash: encodeGeohash(seed.location.lat, seed.location.lng),
+        gsiPkV2: encodeGeohash(seed.location.lat, seed.location.lng)[0],
         description: description || undefined,
         createdAt: now,
         updatedAt: now,

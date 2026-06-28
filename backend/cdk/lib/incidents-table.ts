@@ -25,11 +25,11 @@ export class IncidentsTable extends Construct {
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
 
-    // Bbox queries: PK is a fixed string, SK is the geohash. This makes
-    // begins_with() queries possible (O(log n) regardless of bbox size).
+    // Bbox queries: PK = first char of geohash (~32 shards), SK = geohash.
+    // Sharding distributes load across partitions instead of one hot partition.
     this.table.addGlobalSecondaryIndex({
-      indexName: 'geo-index',
-      partitionKey: { name: 'gsiPk', type: dynamodb.AttributeType.STRING },
+      indexName: 'geo-index-v2',
+      partitionKey: { name: 'gsiPkV2', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
 

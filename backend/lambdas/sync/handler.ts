@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { docClient, TABLES, putItem, updateItem, GEO_INDEX_PK } from '../../shared/db.js';
+import { docClient, TABLES, putItem, updateItem } from '../../shared/db.js';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'node:crypto';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
@@ -110,7 +110,7 @@ async function applyCreate(
     confirmations: 1,
     negativeVotes: 0,
     imageCount,
-    gsiPk: GEO_INDEX_PK,
+    gsiPkV2: geohash[0],
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
@@ -168,19 +168,23 @@ async function applyConfirm(
 
 async function findDuplicate(type: string, geohash: string, lat: number, lng: number): Promise<Incident | null> {
   const cells = geohashNeighbours(geohash);
-  for (const cell of cells) {
-    const res = await docClient.send(
-      new QueryCommand({
-        TableName: TABLES.incidents,
-        IndexName: 'type-geohash-index',
-        KeyConditionExpression: '#t = :t AND begins_with(geohash, :gh)',
-        FilterExpression: '#s = :status',
-        ExpressionAttributeNames: { '#t': 'type', '#s': 'status' },
-        ExpressionAttributeValues: { ':t': type, ':gh': cell, ':status': 'active' },
-      }),
-    );
-    if (!res.Items) continue;
-    for (const item of res.Items as Incident[]) {
+  const results = await Promise.all(
+    cells.map(async (cell) => {
+      const res = await docClient.send(
+        new QueryCommand({
+          TableName: TABLES.incidents,
+          IndexName: 'type-geohash-index',
+          KeyConditionExpression: '#t = :t AND begins_with(geohash, :gh)',
+          FilterExpression: '#s = :status',
+          ExpressionAttributeNames: { '#t': 'type', '#s': 'status' },
+          ExpressionAttributeValues: { ':t': type, ':gh': cell, ':status': 'active' },
+        }),
+      );
+      return (res.Items ?? []) as Incident[];
+    }),
+  );
+  for (const items of results) {
+    for (const item of items) {
       if (haversineMeters(lat, lng, item.location.lat, item.location.lng) <= DUPLICATE_RADIUS_METERS) return item;
     }
   }

@@ -60,8 +60,8 @@ export interface Incident {
   confirmations: number;
   negativeVotes: number;
   imageCount: number;
-  /** Fixed partition key for the geo-index GSI. */
-  gsiPk?: string;
+  /** Partition key for the geo-index-v2 GSI (first char of geohash, ~32 shards). */
+  gsiPkV2?: string;
 }
 
 export interface Confirmation {
