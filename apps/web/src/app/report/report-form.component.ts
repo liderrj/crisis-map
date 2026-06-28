@@ -1,4 +1,4 @@
-import { Component, inject, output, signal, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, inject, output, signal, computed, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DeviceIdService } from '../core/device-id.service';
 import { ImageUploadService } from './image-upload.service';
@@ -18,7 +18,7 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
   standalone: true,
   imports: [FormsModule],
   template: `
-    <div class="cm-sheet">
+    <div class="cm-sheet" (click)="typeOpen.set(false)">
       <h2>{{ i18n.t('report.title') }}</h2>
 
       <div class="cm-map-wrap">
@@ -28,17 +28,13 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
 
       <label>{{ i18n.t('report.type') }}
         <div class="cm-type-wrap">
-          <input #typeInput
-            [ngModel]="typeFilter"
-            (ngModelChange)="typeFilter=$event; typeOpen.set(true)"
-            (focus)="typeOpen.set(true)"
-            (blur)="onTypeBlur()"
-            placeholder="Buscar…"
-            autocomplete="off"
-          />
-          @if (typeOpen() && filteredTypes.length) {
-            <div class="cm-type-drop">
-              @for (t of filteredTypes; track t.type) {
+          <button type="button" class="cm-type-btn" (click)="typeOpen.set(!typeOpen()); $event.stopPropagation()">
+            <span>{{ selectedLabel() }}</span>
+            <span class="cm-arrow">{{ typeOpen() ? '▲' : '▼' }}</span>
+          </button>
+          @if (typeOpen()) {
+            <div class="cm-type-drop" (click)="$event.stopPropagation()">
+              @for (t of types; track t.type) {
                 <button type="button" class="cm-type-opt" [class.active]="t.type === type"
                   (mousedown)="selectType(t.type); $event.preventDefault()">
                   <span class="cm-type-opt-check">{{ t.type === type ? '✓' : '' }}</span>
@@ -93,12 +89,16 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
     label { display: flex; flex-direction: column; gap: 4px; font-size: 16px; font-weight: 600; }
     select, textarea, input:not([type=file]) { padding: 12px; font-size: 18px; border: 2px solid #ccc; border-radius: 8px; }
     .cm-type-wrap { position: relative; }
-    .cm-type-wrap input { width: 100%; box-sizing: border-box; }
+    .cm-type-btn { width: 100%; padding: 12px 14px; font-size: 18px; border: 2px solid #ccc;
+      border-radius: 8px; background: #fff; cursor: pointer; display: flex;
+      align-items: center; justify-content: space-between; gap: 8px; color: #111; }
+    .cm-type-btn:active { border-color: #1976d2; }
+    .cm-arrow { font-size: 12px; color: #888; flex-shrink: 0; }
     .cm-type-drop { position: absolute; top: 100%; left: 0; right: 0; z-index: 5;
-      background: #fff; border: 2px solid #ccc; border-top: 0; border-radius: 0 0 8px 8px;
+      background: #fff; border: 2px solid #ccc; border-radius: 8px; margin-top: 4px;
       max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
-    .cm-type-opt { width: 100%; padding: 10px 12px; border: none; background: transparent;
-      text-align: left; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .cm-type-opt { width: 100%; padding: 12px 14px; border: none; background: transparent;
+      text-align: left; font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
     .cm-type-opt:hover, .cm-type-opt.active { background: #e3f2fd; }
     .cm-type-opt.active { font-weight: 600; color: #1565c0; }
     .cm-type-opt-check { width: 16px; font-weight: 700; color: #2e7d32; flex: 0 0 auto; }
@@ -158,16 +158,10 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   severity: Severity = 'medium';
   description = '';
   customType = '';
-  typeFilter = '';
   typeOpen = signal(false);
-
-  get filteredTypes(): typeof this.types {
-    if (!this.typeFilter) return this.types;
-    const q = this.typeFilter.toLowerCase();
-    return this.types.filter(t =>
-      (this.i18n.t('type.' + t.type) || t.label).toLowerCase().includes(q)
-    );
-  }
+  selectedLabel = computed(() =>
+    this.i18n.t('type.' + this.type) || this.types.find(t => t.type === this.type)?.label || this.type
+  );
 
   ngAfterViewInit(): void {
     void this.initMap();
@@ -204,12 +198,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
 
   selectType(t: IncidentType): void {
     this.type = t;
-    this.typeFilter = this.i18n.t('type.' + t) || INCIDENT_TYPES.find(i => i.type === t)?.label || t;
     this.typeOpen.set(false);
-  }
-
-  onTypeBlur(): void {
-    setTimeout(() => this.typeOpen.set(false), 180);
   }
 
   onFiles(e: Event): void {
