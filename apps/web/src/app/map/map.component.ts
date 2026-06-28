@@ -6,8 +6,8 @@ import { ApiClientService } from '../core/api-client.service';
 import { NetworkService } from '../core/network.service';
 import { SyncEngineService } from '../core/sync-engine.service';
 import { DISASTER_ZONE, type Incident } from '../shared/constants';
+import { environment } from '../../environments/environment';
 
-const VENEZUELA_BBOX = { minLat: 0.65, maxLat: 12.25, minLng: -72.5, maxLng: -59.5 };
 const VZ_INITIAL_ZOOM = 11;
 const REFRESH_DEBOUNCE_MS = 1500;
 const PENDING_REFRESH_MS = 2000;
@@ -46,6 +46,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private network = inject(NetworkService);
   private sync = inject(SyncEngineService);
   private map!: L.Map;
+  private userMarker?: L.Marker;
+  private userAccuracyCircle?: L.Circle;
   private clusterGroup!: L.MarkerClusterGroup;
   private markers = new Map<string, { marker: L.Marker; signature: string; pending: boolean }>();
   private openIncidentId = '';
@@ -65,13 +67,13 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     // Start centered on the disaster zone so the prefetched tiles are
     // immediately visible even before GPS resolves. We then try to
-    // re-center on the user if they're inside Venezuela.
+    // re-center on the user's real location.
     this.map = L.map(this.mapEl.nativeElement, { zoomControl: false }).setView(
       DISASTER_ZONE.center as L.LatLngTuple,
       DISASTER_ZONE.zoom,
     );
     L.control.zoom({ position: 'topright' }).addTo(this.map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer(environment.tileUrl, {
       attribution: '&copy; OpenStreetMap',
       maxZoom: 19,
     }).addTo(this.map);
@@ -88,8 +90,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.map.on('moveend zoomend', () => this.scheduleRefresh());
     this.loadCached();
 
-    // Async: try to find the user. If they're in Venezuela, re-center
-    // there. If GPS fails or they're abroad, keep the disaster-zone view.
+    // Async: try to find the user and re-center on their real location.
+    // If GPS fails, keep the disaster-zone view.
     this.tryCenterOnUser();
 
     // Periodically re-render pending markers so they refresh after sync.
@@ -113,9 +115,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           maximumAge: 60000,
         });
       });
-      const { latitude, longitude } = pos.coords;
-      if (!this.isInVenezuela(latitude, longitude)) return;
+      const { latitude, longitude, accuracy } = pos.coords;
       this.map.setView([latitude, longitude], 14, { animate: true });
+      this.showUserMarker(latitude, longitude, accuracy);
     } catch {
       /* keep disaster-zone view */
     }
@@ -211,14 +213,9 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        if (!this.isInVenezuela(lat, lng)) {
-          console.info(`User location outside Venezuela bbox (${lat}, ${lng})`);
-          return;
-        }
+        const { latitude: lat, longitude: lng, accuracy } = pos.coords;
         this.map.setView([lat, lng], 15, { animate: true });
-        this.flashUserMarker(lat, lng);
+        this.showUserMarker(lat, lng, accuracy);
       },
       (err) => {
         console.warn('Geolocation error:', err.code, err.message);
@@ -227,28 +224,27 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  /**
-   * Drop a temporary pulsing dot at the user's location so it's
-   * immediately visible after re-centering. Removed automatically
-   * after a few seconds.
-   */
-  private flashUserMarker(lat: number, lng: number): void {
+  /** Place or update a persistent user-location indicator (dot + accuracy circle). */
+  private showUserMarker(lat: number, lng: number, accuracy: number): void {
+    this.clearUserMarker();
+
     const icon = L.divIcon({
       className: 'cm-user-marker',
       iconSize: [18, 18],
       iconAnchor: [9, 9],
     });
-    const marker = L.marker([lat, lng], { icon, interactive: false }).addTo(this.map);
-    setTimeout(() => {
-      this.map.removeLayer(marker);
-    }, 4000);
-  }
+    this.userMarker = L.marker([lat, lng], { icon, interactive: false }).addTo(this.map);
 
-  private isInVenezuela(lat: number, lng: number): boolean {
-    return lat >= VENEZUELA_BBOX.minLat
-      && lat <= VENEZUELA_BBOX.maxLat
-      && lng >= VENEZUELA_BBOX.minLng
-      && lng <= VENEZUELA_BBOX.maxLng;
+    this.userAccuracyCircle = L.circle([lat, lng], {
+      radius: accuracy,
+      className: 'cm-user-accuracy',
+      interactive: false,
+      fillColor: '#1976d2',
+      fillOpacity: 0.12,
+      color: '#1976d2',
+      opacity: 0.4,
+      weight: 1,
+    }).addTo(this.map);
   }
 
   render(incidents: (Incident & { __pending?: boolean })[]): void {
@@ -376,7 +372,13 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     clearTimeout(this.debounceTimer);
     if (this.pendingTimer) clearInterval(this.pendingTimer);
+    this.clearUserMarker();
     this.markers.clear();
     this.map?.remove();
+  }
+
+  private clearUserMarker(): void {
+    if (this.userMarker) { this.map?.removeLayer(this.userMarker); this.userMarker = undefined; }
+    if (this.userAccuracyCircle) { this.map?.removeLayer(this.userAccuracyCircle); this.userAccuracyCircle = undefined; }
   }
 }

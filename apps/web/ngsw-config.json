@@ -30,7 +30,10 @@
   "dataGroups": [
     {
       "name": "map-tiles",
-      "urls": ["https://*.tile.openstreetmap.org/**"],
+      "urls": [
+        "https://*.cloudfront.net/tiles/**",
+        "https://*.tile.openstreetmap.org/**"
+      ],
       "cacheConfig": {
         "maxSize": 5000,
         "maxAge": "90d",

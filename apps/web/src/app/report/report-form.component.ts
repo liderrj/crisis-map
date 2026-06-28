@@ -8,6 +8,7 @@ import { I18nService } from '../core/i18n.service';
 import { INCIDENT_TYPES, SEVERITIES, categoryForType } from '../shared/constants';
 import type { Severity, IncidentType, Incident, IncidentCategory } from '../shared/constants';
 import { MAX_DESCRIPTION_LENGTH, MAX_IMAGE_COUNT } from '../shared/constants';
+import { environment } from '../../environments/environment';
 
 const NOW_SEC = () => Math.floor(Date.now() / 1000);
 
@@ -184,7 +185,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
       zoom: 16,
       zoomControl: true,
     });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    L.tileLayer(environment.tileUrl, {
       attribution: '&copy; OpenStreetMap',
       maxZoom: 19,
     }).addTo(map);

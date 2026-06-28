@@ -93,19 +93,35 @@ export const MAX_DESCRIPTION_LENGTH = 500;
 
 // Caracas / La Guaira affected zone. Used by:
 // - the initial map centering (GPS-first, this as fallback)
-// - the offline tile prefetch (so the disaster zone is always viewable
-//   without a network connection)
+// - the regional offline tile prefetch (z=11..13, ~184 tiles)
 // - the "Zona del desastre" FAB in the map controls
 export const DISASTER_ZONE = {
   center: [10.483, -66.833] as [number, number],
   zoom: 13,
-  // Bounding box used by the tile prefetch. Slightly larger than the
-  // visual center so neighboring tiles are also cached.
   bbox: { minLat: 10.30, maxLat: 10.72, minLng: -67.05, maxLng: -66.55 },
-  // Zoom levels to prefetch. z=11 gives regional context, z=15 gives
-  // street-level detail in the densest part of Caracas.
-  prefetchZooms: [11, 12, 13, 14, 15] as readonly number[],
+  prefetchZooms: [11, 12, 13] as readonly number[],
 } as const;
+
+// Smaller, high-priority bboxes where we want street-level detail
+// (z=11..16). The prefetch iterates over these and downloads the
+// tiles into the Service Worker Cache API so the map works offline
+// at full zoom in the most affected neighborhoods.
+export const CRITICAL_ZONES: ReadonlyArray<{
+  name: string;
+  bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+  prefetchZooms: readonly number[];
+}> = [
+  {
+    name: 'Altamira',
+    bbox: { minLat: 10.480, maxLat: 10.520, minLng: -66.880, maxLng: -66.850 },
+    prefetchZooms: [11, 12, 13, 14, 15, 16],
+  },
+  {
+    name: 'La Guaira capital',
+    bbox: { minLat: 10.600, maxLat: 10.650, minLng: -66.930, maxLng: -66.900 },
+    prefetchZooms: [11, 12, 13, 14, 15, 16],
+  },
+] as const;
 
 // Subdomains used by OSM tile servers; we round-robin by hashing x+y+z
 // so the prefetch and the live Leaflet requests don't pile up on the

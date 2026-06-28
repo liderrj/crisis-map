@@ -115,12 +115,12 @@ flushes pending images after each successful `create_incident`.
 |--------------|---------------------------------------------------------|
 | Frontend     | Angular 21, standalone components, signals, IndexedDB   |
 | Map          | Leaflet 1.9 + `leaflet.markercluster`                   |
-| Tiles        | OpenStreetMap                                           |
+| Tiles        | Self-hosted OSM raster tiles via S3 + CloudFront — see [SELF_HOSTED_TILES.md](./apps/web/SELF_HOSTED_TILES.md) |
 | Compression  | Browser `<canvas>` → WebP / JPEG                         |
 | i18n         | Custom lightweight in-memory dictionary (es / en / pt)  |
 | Backend      | AWS Lambda (Node 20) + API Gateway (HTTP API)          |
 | Database     | DynamoDB single-table design with category GSI          |
-| Storage      | S3 bucket behind CloudFront (Origin Access Control)     |
+| Storage      | Two S3 buckets behind CloudFront (Origin Access Control): incident images + map tiles |
 | IaC          | AWS CDK (TypeScript)                                    |
 | Hosting      | Netlify (static SPA, free tier)                         |
 

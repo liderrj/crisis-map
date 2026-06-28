@@ -1,9 +1,13 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { NetworkService } from './network.service';
-import { DISASTER_ZONE, OSM_TILE_SUBDOMAINS } from '../shared/constants';
+import {
+  DISASTER_ZONE,
+  CRITICAL_ZONES,
+} from '../shared/constants';
+import { environment } from '../../environments/environment';
 
-const STORAGE_KEY = 'crisismap_tiles_prefetched_v1';
-const MAX_CONCURRENT = 6;
+const STORAGE_KEY = 'crisismap_tiles_prefetched_v2';
+const MAX_CONCURRENT = 10;
 
 function lngToTileX(lng: number, zoom: number): number {
   return Math.floor(((lng + 180) / 360) * Math.pow(2, zoom));
@@ -17,16 +21,13 @@ function latToTileY(lat: number, zoom: number): number {
   );
 }
 
-function tileUrl(sub: string, z: number, x: number, y: number): string {
-  return `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
-}
-
 interface PrefetchStatus {
   running: boolean;
   total: number;
   done: number;
   failed: number;
   startedAt: number | null;
+  currentZone: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -40,6 +41,7 @@ export class TilePrefetchService {
     done: 0,
     failed: 0,
     startedAt: null,
+    currentZone: null,
   });
 
   readonly visible = computed(() => this.status().running);
@@ -50,25 +52,59 @@ export class TilePrefetchService {
   });
 
   /**
-   * Builds the list of tile URLs to prefetch for the disaster zone.
-   * Pure function so it can be unit-tested without a service instance.
+   * Builds the list of tile URLs to prefetch for every zone in scope.
+   *
+   * In production the URL template points at the self-hosted CloudFront
+   * distribution (so we never depend on OSM's servers at runtime). In
+   * dev the template still points at OSM directly so a contributor
+   * doesn't need to spin up the bucket to iterate.
+   *
+   * Each zone declares its own bbox + zoom range, so the tile list
+   * combines a wide regional view of the disaster zone with
+   * street-level detail for the highest-priority neighborhoods.
    */
   buildTileList(): string[] {
-    const { minLat, maxLat, minLng, maxLng } = DISASTER_ZONE.bbox;
+    const zones: Array<{
+      name: string;
+      bbox: { minLat: number; maxLat: number; minLng: number; maxLng: number };
+      zooms: readonly number[];
+    }> = [
+      ...CRITICAL_ZONES.map((z) => ({
+        name: z.name,
+        bbox: z.bbox,
+        zooms: z.prefetchZooms,
+      })),
+      {
+        name: 'Disaster zone',
+        bbox: DISASTER_ZONE.bbox,
+        zooms: DISASTER_ZONE.prefetchZooms,
+      },
+    ];
+
     const urls: string[] = [];
-    for (const z of DISASTER_ZONE.prefetchZooms) {
-      const xMin = lngToTileX(minLng, z);
-      const xMax = lngToTileX(maxLng, z);
-      const yMin = latToTileY(maxLat, z); // lat decreases as y increases
-      const yMax = latToTileY(minLat, z);
-      for (let x = xMin; x <= xMax; x++) {
-        for (let y = yMin; y <= yMax; y++) {
-          const sub = OSM_TILE_SUBDOMAINS[(x + y + z) % OSM_TILE_SUBDOMAINS.length];
-          urls.push(tileUrl(sub, z, x, y));
+    for (const zone of zones) {
+      const { minLat, maxLat, minLng, maxLng } = zone.bbox;
+      for (const z of zone.zooms) {
+        const xMin = lngToTileX(minLng, z);
+        const xMax = lngToTileX(maxLng, z);
+        const yMin = latToTileY(maxLat, z);
+        const yMax = latToTileY(minLat, z);
+        for (let x = xMin; x <= xMax; x++) {
+          for (let y = yMin; y <= yMax; y++) {
+            urls.push(this.tileUrl(z, x, y));
+          }
         }
       }
     }
-    return urls;
+    // Dedupe (overlapping bboxes at the same zoom can share edges).
+    return Array.from(new Set(urls));
+  }
+
+  private tileUrl(z: number, x: number, y: number): string {
+    return environment.tileUrl
+      .replace('{z}', String(z))
+      .replace('{x}', String(x))
+      .replace('{y}', String(y));
   }
 
   /**
@@ -87,8 +123,8 @@ export class TilePrefetchService {
   }
 
   /**
-   * Force a fresh prefetch (used by the "Redownload map" button in the
-   * prefetch banner's overflow menu).
+   * Force a fresh prefetch (used by the prefetch banner's reload
+   * button, or by a "Redownload map" menu item in the future).
    */
   async run(): Promise<void> {
     if (this.status().running) return;
@@ -103,6 +139,7 @@ export class TilePrefetchService {
       done: 0,
       failed: 0,
       startedAt: Date.now(),
+      currentZone: null,
     });
 
     let done = 0;
@@ -117,12 +154,11 @@ export class TilePrefetchService {
         try {
           // The Angular SW dataGroup "map-tiles" intercepts these
           // fetches and writes the response into its Cache API.
-          // We use 'no-cors' because OSM tiles don't return
-          // Access-Control-Allow-Origin headers — a normal fetch
-          // would be blocked by CORS. 'no-cors' returns an opaque
-          // response that the SW still happily caches, and the
-          // browser later loads the same URL via <img> tags (which
-          // are not subject to CORS).
+          // We use 'no-cors' because the self-hosted CDN returns a
+          // permissive CORS policy but the request still might race
+          // with other opac responses; 'no-cors' guarantees the SW
+          // caches something usable. Browser later loads the same
+          // URL via <img> tags (which aren't subject to CORS).
           await fetch(url, {
             mode: 'no-cors',
             signal: this.abortController?.signal,
@@ -144,10 +180,11 @@ export class TilePrefetchService {
       Array.from({ length: Math.min(MAX_CONCURRENT, urls.length) }, () => worker()),
     );
 
-    this.status.update((s) => ({ ...s, running: false }));
+    this.status.update((s) => ({ ...s, running: false, currentZone: null }));
 
-    // Persist the completion flag only if we got at least most tiles.
-    // We allow up to 10% failures (network blips, OSM rate limits).
+    // Mark complete only if at least 90% landed. Anything below that
+    // means our CDN is misconfigured or the SW rejected the requests
+    // and we should retry on the next launch.
     if (done + failed === urls.length && done / urls.length >= 0.9) {
       try {
         localStorage.setItem(STORAGE_KEY, '1');
@@ -165,6 +202,7 @@ export class TilePrefetchService {
       done: 0,
       failed: 0,
       startedAt: null,
+      currentZone: null,
     });
   }
 }

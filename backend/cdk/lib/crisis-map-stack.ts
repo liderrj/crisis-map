@@ -8,6 +8,7 @@ import { IncidentsTable } from './incidents-table';
 import { ConfirmationsTable } from './confirmations-table';
 import { DevicesTable } from './devices-table';
 import { ImageStorage } from './image-storage';
+import { TileStorage } from './tile-storage';
 import { CrisisMapApi } from './api';
 
 export class CrisisMapStack extends cdk.Stack {
@@ -23,6 +24,7 @@ export class CrisisMapStack extends cdk.Stack {
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
     const devices = new DevicesTable(this, 'DevicesTable');
     const images = new ImageStorage(this, 'ImageStorage');
+    const tiles = new TileStorage(this, 'TileStorage');
     const api = new CrisisMapApi(this, 'Api');
 
     const sharedPolicy = new iam.PolicyStatement({
@@ -126,5 +128,7 @@ export class CrisisMapStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url });
     new cdk.CfnOutput(this, 'ImageBucketName', { value: images.bucket.bucketName });
     new cdk.CfnOutput(this, 'ImageCdnUrl', { value: `https://${images.distribution.distributionDomainName}` });
+    new cdk.CfnOutput(this, 'TileBucketName', { value: tiles.bucket.bucketName });
+    new cdk.CfnOutput(this, 'TileCdnUrl', { value: `https://${tiles.distribution.distributionDomainName}` });
   }
 }

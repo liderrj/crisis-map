@@ -112,8 +112,16 @@ import { I18nService } from '../core/i18n.service';
     .cm-fab-report { background: #d32f2f; color: #fff; }
     .cm-fab-report .cm-fab-icon { font-size: 28px; }
     .cm-fab-locate { background: #1976d2; color: #fff; }
-    .cm-fab-disaster { background: #e65100; color: #fff; }
+    .cm-fab-disaster { background: #e65100; color: #fff; animation: cm-disaster-pulse 1.6s ease-out infinite; }
     .cm-fab-menu { background: #424242; color: #fff; }
+    @keyframes cm-disaster-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(230, 81, 0, .6), 0 3px 10px rgba(0,0,0,.3); }
+      70%  { box-shadow: 0 0 0 16px rgba(230, 81, 0, 0), 0 3px 10px rgba(0,0,0,.3); }
+      100% { box-shadow: 0 0 0 0 rgba(230, 81, 0, 0), 0 3px 10px rgba(0,0,0,.3); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cm-fab-disaster { animation: none; }
+    }
 
     .cm-menu-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1050; }
     .cm-menu {
