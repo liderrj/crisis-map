@@ -16,7 +16,7 @@ import { I18nService } from '../core/i18n.service';
         <span class="cm-fab-label">{{ i18n.t('fab.report') }}</span>
       </button>
 
-      <button class="cm-fab cm-fab-menu" (click)="toggleMenu.emit()" [attr.aria-label]="menuLabel()" [attr.aria-expanded]="menuOpen()">
+       <button class="cm-fab cm-fab-menu" (click)="toggle()" [attr.aria-label]="menuLabel()" [attr.aria-expanded]="menuOpen()">
         <span class="cm-fab-icon">☰</span>
         <span class="cm-fab-label">{{ menuLabel() }}</span>
       </button>
@@ -31,6 +31,12 @@ import { I18nService } from '../core/i18n.service';
         </header>
 
         <ul>
+          <li>
+            <button (click)="emitAndClose('list')">
+              <span class="cm-menu-icon">☰</span>
+              <span class="cm-menu-text">{{ i18n.t('fab.list') }}</span>
+            </button>
+          </li>
           <li>
             <button (click)="emitAndClose('filters')">
               <span class="cm-menu-icon">☰</span>
@@ -47,6 +53,12 @@ import { I18nService } from '../core/i18n.service';
             <button (click)="emitAndClose('resources')">
               <span class="cm-menu-icon">⛓</span>
               <span class="cm-menu-text">{{ i18n.t('fab.resources') }}</span>
+            </button>
+          </li>
+          <li>
+            <button (click)="emitAndClose('alias')">
+              <span class="cm-menu-icon">👤</span>
+              <span class="cm-menu-text">{{ i18n.t('fab.alias') }}</span>
             </button>
           </li>
           <li>
@@ -150,13 +162,20 @@ export class MapControlsComponent {
 
   readonly report = output<void>();
   readonly locate = output<void>();
+  readonly list = output<void>();
   readonly filters = output<void>();
   readonly legend = output<void>();
   readonly resources = output<void>();
   readonly terms = output<void>();
   readonly contact = output<void>();
+  readonly alias = output<void>();
   readonly toggleLang = output<void>();
   readonly toggleMenu = output<void>();
+
+  toggle(): void {
+    this.menuOpen.update(v => !v);
+    this.toggleMenu.emit();
+  }
   readonly setLocale = output<'es' | 'en' | 'pt'>();
 
   menuLabel(): string {
@@ -166,6 +185,8 @@ export class MapControlsComponent {
   emitAndClose(name: string): void {
     this.menuOpen.set(false);
     switch (name) {
+      case 'list': this.list.emit(); break;
+      case 'alias': this.alias.emit(); break;
       case 'filters': this.filters.emit(); break;
       case 'legend': this.legend.emit(); break;
       case 'resources': this.resources.emit(); break;
