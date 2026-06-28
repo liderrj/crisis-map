@@ -47,7 +47,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private sync = inject(SyncEngineService);
   private map!: L.Map;
   private userMarker?: L.Marker;
-  private userAccuracyCircle?: L.Circle;
+  private userAccuracyCircle?: ReturnType<typeof L.circle>;
   private clusterGroup!: L.MarkerClusterGroup;
   private markers = new Map<string, { marker: L.Marker; signature: string; pending: boolean }>();
   private openIncidentId = '';
