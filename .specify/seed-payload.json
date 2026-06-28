@@ -1,0 +1,19 @@
+{
+  "incidents": [
+    { "incidentId": "seed-huc-01", "type": "hospital", "severity": "low", "location": { "lat": 10.502, "lng": -66.913 }, "description": "Hospital Universitario de Caracas — referencia funcional", "confirmations": 12, "alias": "system" },
+    { "incidentId": "seed-hcc-01", "type": "hospital", "severity": "low", "location": { "lat": 10.501, "lng": -66.913 }, "description": "Hospital Clínico de Caracas — funcional", "confirmations": 11, "alias": "system" },
+    { "incidentId": "seed-hvargas-01", "type": "hospital", "severity": "low", "location": { "lat": 10.505, "lng": -66.925 }, "description": "Hospital Dr. José María Vargas — centro", "confirmations": 8, "alias": "system" },
+    { "incidentId": "seed-hperezleon-01", "type": "hospital", "severity": "low", "location": { "lat": 10.487, "lng": -66.815 }, "description": "Hospital Pérez de León (Petare) — funcional", "confirmations": 7, "alias": "system" },
+    { "incidentId": "seed-hsanatrix-01", "type": "hospital", "severity": "low", "location": { "lat": 10.585, "lng": -66.985 }, "description": "Clínica Sanatrix (cerca aeropuerto) — funcional", "confirmations": 6, "alias": "system" },
+    { "incidentId": "seed-elhatillo-01", "type": "shelter", "severity": "low", "location": { "lat": 10.394, "lng": -66.798 }, "description": "Refugio El Hatillo — zona alta, segura", "confirmations": 14, "alias": "system" },
+    { "incidentId": "seed-galipan-01", "type": "shelter", "severity": "low", "location": { "lat": 10.541, "lng": -66.880 }, "description": "Refugio Galipán — zona alta Ávila", "confirmations": 10, "alias": "system" },
+    { "incidentId": "seed-bellomonte-01", "type": "shelter", "severity": "low", "location": { "lat": 10.485, "lng": -66.880 }, "description": "Refugio Colinas de Bello Monte — zona alta oeste", "confirmations": 9, "alias": "system" },
+    { "incidentId": "seed-ccs-01", "type": "shelter", "severity": "low", "location": { "lat": 10.603, "lng": -66.991 }, "description": "Aeropuerto Simón Bolívar (CCS) — cerrado por daños", "confirmations": 18, "alias": "system" },
+    { "incidentId": "seed-plazafrancia-01", "type": "shelter", "severity": "low", "location": { "lat": 10.490, "lng": -66.836 }, "description": "Punto de encuentro Plaza Francia (Altamira)", "confirmations": 9, "alias": "system" },
+    { "incidentId": "seed-bomberos-01", "type": "shelter", "severity": "low", "location": { "lat": 10.490, "lng": -66.836 }, "description": "Estación de Bomberos Altamira", "confirmations": 8, "alias": "system" },
+    { "incidentId": "seed-laguaira-01", "type": "shelter", "severity": "low", "location": { "lat": 10.572, "lng": -66.880 }, "description": "Refugio La Guaira capital — operativo", "confirmations": 10, "alias": "system" },
+    { "incidentId": "seed-caraballeda-01", "type": "shelter", "severity": "low", "location": { "lat": 10.613, "lng": -66.851 }, "description": "Refugio Caraballeda — operativo", "confirmations": 8, "alias": "system" },
+    { "incidentId": "seed-catia-01", "type": "shelter", "severity": "low", "location": { "lat": 10.604, "lng": -67.030 }, "description": "Refugio Catia La Mar — operativo", "confirmations": 8, "alias": "system" },
+    { "incidentId": "seed-starlink-01", "type": "starlink", "severity": "low", "location": { "lat": 10.490, "lng": -66.836 }, "description": "WiFi satelital Starlink — Altamira (punto de conectividad)", "confirmations": 11, "alias": "system" }
+  ]
+}
