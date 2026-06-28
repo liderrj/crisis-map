@@ -16,6 +16,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'fab.report': 'Reportar',
     'fab.locate': 'Mi ubicación',
+    'fab.disasterZone': 'Zona del desastre',
     'fab.list': 'Lista',
     'fab.alias': 'Mi alias',
     'alias.title': 'Tu alias',
@@ -23,6 +24,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'alias.placeholder': 'Ej: Juan, Equipo Rescate CCS…',
     'alias.save': 'Guardar',
     'alias.required': 'Escribe un alias para continuar',
+    'prefetch.title': 'Descargando mapa offline…',
     'list.title': 'Lista de reportes',
     'list.locating': 'Obteniendo ubicación…',
     'list.empty': 'No hay reportes cerca',
@@ -200,6 +202,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'fab.report': 'Report',
     'fab.locate': 'My location',
+    'fab.disasterZone': 'Disaster zone',
     'fab.list': 'List',
     'fab.alias': 'My alias',
     'alias.title': 'Your alias',
@@ -207,6 +210,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'alias.placeholder': 'e.g. John, Rescue Team CCS…',
     'alias.save': 'Save',
     'alias.required': 'Enter an alias to continue',
+    'prefetch.title': 'Downloading offline map…',
     'list.title': 'Report list',
     'list.locating': 'Getting location…',
     'list.empty': 'No reports nearby',
@@ -384,6 +388,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'fab.report': 'Reportar',
     'fab.locate': 'Minha localização',
+    'fab.disasterZone': 'Zona do desastre',
     'fab.list': 'Lista',
     'fab.alias': 'Meu alias',
     'alias.title': 'Seu alias',
@@ -391,6 +396,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
     'alias.placeholder': 'Ex: João, Equipe Resgate CCS…',
     'alias.save': 'Salvar',
     'alias.required': 'Escreva um alias para continuar',
+    'prefetch.title': 'Baixando mapa offline…',
     'list.title': 'Lista de reportes',
     'list.locating': 'Obtendo localização…',
     'list.empty': 'Nenhum relatório próximo',

@@ -11,6 +11,11 @@ import { I18nService } from '../core/i18n.service';
         <span class="cm-fab-label">{{ i18n.t('fab.locate') }}</span>
       </button>
 
+      <button class="cm-fab cm-fab-disaster" (click)="disasterZone.emit()" [attr.aria-label]="i18n.t('fab.disasterZone')">
+        <span class="cm-fab-icon">◎</span>
+        <span class="cm-fab-label">{{ i18n.t('fab.disasterZone') }}</span>
+      </button>
+
       <button class="cm-fab cm-fab-report" (click)="report.emit()" [attr.aria-label]="i18n.t('fab.report')">
         <span class="cm-fab-icon">＋</span>
         <span class="cm-fab-label">{{ i18n.t('fab.report') }}</span>
@@ -107,6 +112,7 @@ import { I18nService } from '../core/i18n.service';
     .cm-fab-report { background: #d32f2f; color: #fff; }
     .cm-fab-report .cm-fab-icon { font-size: 28px; }
     .cm-fab-locate { background: #1976d2; color: #fff; }
+    .cm-fab-disaster { background: #e65100; color: #fff; }
     .cm-fab-menu { background: #424242; color: #fff; }
 
     .cm-menu-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1050; }
@@ -162,6 +168,7 @@ export class MapControlsComponent {
 
   readonly report = output<void>();
   readonly locate = output<void>();
+  readonly disasterZone = output<void>();
   readonly list = output<void>();
   readonly filters = output<void>();
   readonly legend = output<void>();

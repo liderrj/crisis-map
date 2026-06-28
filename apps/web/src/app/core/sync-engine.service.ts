@@ -76,8 +76,11 @@ export class SyncEngineService {
     this.status.set('syncing');
     try {
       const drained = await this.drainTextOutbox();
+      // Always sweep for orphaned pending images. Some uploads may
+      // have failed on a previous cycle and survived in IndexedDB
+      // (the S3 PUT can fail and the image stays for the next attempt).
+      await this.retryPendingImages();
       if (drained) {
-        await this.flushImages();
         this.nextDelay = INITIAL_DELAY_MS;
       }
       this.status.set('idle');
@@ -146,21 +149,41 @@ export class SyncEngineService {
       };
       delete resolved.__pending;
       await this.storage.putIncident(resolved as Incident);
-      await this.storage.deletePendingImage(payload.outboxId);
+
+      // Upload any pending images for this incident. We:
+      //   1) Update the pending image entry's incidentId so a future
+      //      retry pass can find it (orphan-resilient).
+      //   2) Hand the blobs to ImageUploadService, which uploads to
+      //      S3 and deletes the pending entry on success.
+      //   If the upload fails, the pending entry stays in IndexedDB
+      //   and the next retryPendingImages() sweep will try again.
+      await this.storage.setPendingImageIncidentId(payload.outboxId, serverId);
+      await this.images.flushPendingFor(payload.outboxId, serverId);
     } else if (duplicateOf) {
+      // The server already had this report. Drop our local copy and
+      // any photos we had queued for it (we don't want to attach them
+      // to the duplicate).
       await this.storage.deleteIncident(payload.outboxId);
+      await this.storage.deletePendingImage(payload.outboxId);
     }
   }
 
-  private async flushImages(): Promise<void> {
-    const outbox = await this.storage.getOutbox();
-    for (const entry of outbox) {
-      if (entry.op !== 'create_incident') continue;
-      const payload = entry.payload as { outboxId?: string };
-      if (!payload.outboxId) continue;
-      const serverIncident = await this.storage.getIncident(payload.outboxId);
-      if (!serverIncident) continue;
-      await this.images.flushPendingFor(payload.outboxId, serverIncident.incidentId);
+  /**
+   * Sweep every pending image entry and try to upload any that already
+   * have a server-assigned incidentId. This handles two cases the
+   * happy-path `onSyncSuccess` doesn't cover:
+   *
+   *   1. ImageUploadService.flushPendingFor threw during a previous
+   *      cycle (S3 blip, 5xx, network drop mid-upload). The pending
+   *      entry is left in IndexedDB so we can try again.
+   *   2. The user re-opens the app days later and there are stale
+   *      entries that didn't make it to S3.
+   */
+  private async retryPendingImages(): Promise<void> {
+    const pending = await this.storage.getPendingImages();
+    for (const p of pending) {
+      if (!p.incidentId) continue;
+      await this.images.flushPendingFor(p.outboxId, p.incidentId);
     }
   }
 

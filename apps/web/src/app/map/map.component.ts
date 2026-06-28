@@ -5,10 +5,9 @@ import { I18nService } from '../core/i18n.service';
 import { ApiClientService } from '../core/api-client.service';
 import { NetworkService } from '../core/network.service';
 import { SyncEngineService } from '../core/sync-engine.service';
-import type { Incident } from '../shared/constants';
+import { DISASTER_ZONE, type Incident } from '../shared/constants';
 
 const VENEZUELA_BBOX = { minLat: 0.65, maxLat: 12.25, minLng: -72.5, maxLng: -59.5 };
-const VZ_CENTER: L.LatLngTuple = [10.483, -66.833];
 const VZ_INITIAL_ZOOM = 11;
 const REFRESH_DEBOUNCE_MS = 1500;
 const PENDING_REFRESH_MS = 2000;
@@ -45,7 +44,13 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private lastViewport = '';
 
   ngAfterViewInit(): void {
-    this.map = L.map(this.mapEl.nativeElement, { zoomControl: false }).setView(VZ_CENTER, VZ_INITIAL_ZOOM);
+    // Start centered on the disaster zone so the prefetched tiles are
+    // immediately visible even before GPS resolves. We then try to
+    // re-center on the user if they're inside Venezuela.
+    this.map = L.map(this.mapEl.nativeElement, { zoomControl: false }).setView(
+      DISASTER_ZONE.center as L.LatLngTuple,
+      DISASTER_ZONE.zoom,
+    );
     L.control.zoom({ position: 'topright' }).addTo(this.map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap',
@@ -63,7 +68,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
     this.map.on('moveend zoomend', () => this.scheduleRefresh());
     this.loadCached();
-    this.scheduleRefresh();
+
+    // Async: try to find the user. If they're in Venezuela, re-center
+    // there. If GPS fails or they're abroad, keep the disaster-zone view.
+    this.tryCenterOnUser();
 
     // Periodically re-render pending markers so they refresh after sync.
     this.pendingTimer = setInterval(() => {
@@ -74,6 +82,71 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     window.addEventListener('online', () => {
       void this.refreshPending();
     });
+  }
+
+  private async tryCenterOnUser(): Promise<void> {
+    if (!navigator.geolocation) return;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 6000,
+          maximumAge: 60000,
+        });
+      });
+      const { latitude, longitude } = pos.coords;
+      if (!this.isInVenezuela(latitude, longitude)) return;
+      this.map.setView([latitude, longitude], 14, { animate: true });
+    } catch {
+      /* keep disaster-zone view */
+    }
+  }
+
+  /** Public: re-center the map on the disaster zone (called by FAB). */
+  centerOnDisasterZone(): void {
+    this.map.setView(DISASTER_ZONE.center as L.LatLngTuple, DISASTER_ZONE.zoom, { animate: true });
+  }
+
+  private scheduleRefresh(): void {
+    clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(async () => {
+      if (this.inFlight) return;
+      this.inFlight = true;
+
+      const b = this.map.getBounds();
+      const viewportKey = this.viewportKey(b);
+      if (viewportKey === this.lastViewport) {
+        this.inFlight = false;
+        return;
+      }
+      this.lastViewport = viewportKey;
+
+      const bbox = this.layer.bboxFromBounds({
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      });
+
+      try {
+        const result = await this.layer.loadBbox(bbox, this.filters(), (fresh) => {
+          this.render(fresh);
+        });
+        const pending = await this.layer.getPendingIncidents();
+        const confirmed = result.incidents.filter((i) => !(i as Incident & { __pending?: boolean }).__pending);
+        const allToRender = [...pending, ...confirmed];
+        if (allToRender.length > 0) {
+          this.render(allToRender);
+        }
+      } catch {
+        try {
+          const cached = await this.layer.getCached();
+          if (cached.length > 0) this.render(cached);
+        } catch { }
+      } finally {
+        this.inFlight = false;
+      }
+    }, REFRESH_DEBOUNCE_MS);
   }
 
   private async refreshPending(): Promise<void> {
@@ -132,50 +205,6 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       && lat <= VENEZUELA_BBOX.maxLat
       && lng >= VENEZUELA_BBOX.minLng
       && lng <= VENEZUELA_BBOX.maxLng;
-  }
-
-  private scheduleRefresh(): void {
-    clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(async () => {
-      if (this.inFlight) return;
-      this.inFlight = true;
-
-      const b = this.map.getBounds();
-      const viewportKey = this.viewportKey(b);
-      if (viewportKey === this.lastViewport) {
-        this.inFlight = false;
-        return;
-      }
-      this.lastViewport = viewportKey;
-
-      const bbox = this.layer.bboxFromBounds({
-        west: b.getWest(),
-        south: b.getSouth(),
-        east: b.getEast(),
-        north: b.getNorth(),
-      });
-
-      try {
-        const result = await this.layer.loadBbox(bbox, this.filters(), (fresh) => {
-          this.render(fresh);
-        });
-        const pending = await this.layer.getPendingIncidents();
-        // Always render with the combined view: confirmed + pending.
-        // An empty render would wipe all markers, so we guard each slice.
-        const confirmed = result.incidents.filter((i) => !(i as Incident & { __pending?: boolean }).__pending);
-        const allToRender = [...pending, ...confirmed];
-        if (allToRender.length > 0) {
-          this.render(allToRender);
-        }
-      } catch {
-        try {
-          const cached = await this.layer.getCached();
-          if (cached.length > 0) this.render(cached);
-        } catch { }
-      } finally {
-        this.inFlight = false;
-      }
-    }, REFRESH_DEBOUNCE_MS);
   }
 
   render(incidents: (Incident & { __pending?: boolean })[]): void {

@@ -110,6 +110,20 @@ export class StorageService {
     return (await db.get('pendingImages', outboxId)) as PendingImage | undefined;
   }
 
+  /**
+   * Update only the server-assigned incidentId on a pending image
+   * entry. Called by the sync engine once the parent create_incident
+   * op gets back a real ID from the server. We keep the blobs intact
+   * so the next pass can attempt the S3 PUT.
+   */
+  async setPendingImageIncidentId(outboxId: string, incidentId: string): Promise<void> {
+    const db = await this.db();
+    const existing = (await db.get('pendingImages', outboxId)) as PendingImage | undefined;
+    if (!existing) return;
+    existing.incidentId = incidentId;
+    await db.put('pendingImages', existing);
+  }
+
   async deletePendingImage(outboxId: string): Promise<void> {
     const db = await this.db();
     await db.delete('pendingImages', outboxId);

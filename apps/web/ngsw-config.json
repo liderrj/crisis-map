@@ -32,8 +32,8 @@
       "name": "map-tiles",
       "urls": ["https://*.tile.openstreetmap.org/**"],
       "cacheConfig": {
-        "maxSize": 200,
-        "maxAge": "30d",
+        "maxSize": 5000,
+        "maxAge": "90d",
         "strategy": "performance"
       }
     }

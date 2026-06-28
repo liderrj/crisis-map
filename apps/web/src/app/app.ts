@@ -9,11 +9,13 @@ import { DuplicatePromptComponent } from './report/duplicate-prompt.component';
 import { IncidentDetailComponent } from './incident/incident-detail.component';
 import { IncidentListComponent } from './incident/incident-list.component';
 import { BannerTrayComponent } from './banner/banner-tray.component';
+import { PrefetchBannerComponent } from './banner/prefetch-banner.component';
 import { ResourcesComponent } from './resources/resources.component';
 import { TermsComponent } from './terms/terms.component';
 import { ContactComponent } from './contact/contact.component';
 import { SyncEngineService } from './core/sync-engine.service';
 import { SeedService } from './core/seed.service';
+import { TilePrefetchService } from './core/tile-prefetch.service';
 import { I18nService } from './core/i18n.service';
 import { DeviceIdService } from './core/device-id.service';
 import type { FilterState } from './map/incident-layer.service';
@@ -33,25 +35,27 @@ import type { Incident, IncidentCategory, IncidentType } from './shared/constant
     IncidentDetailComponent,
     IncidentListComponent,
     BannerTrayComponent,
+    PrefetchBannerComponent,
     ResourcesComponent,
     TermsComponent,
     ContactComponent,
   ],
   template: `
-    <app-banner-tray />
-    <app-map (incidentSelected)="onIncidentSelected($event)" />
+<app-banner-tray />
+    <app-map #map (incidentSelected)="onIncidentSelected($event)" />
     <app-map-controls
       (report)="onReport()"
       (locate)="onLocate()"
+      (disasterZone)="onDisasterZone()"
       (filters)="showFilters.set(true)"
       (legend)="showLegend.set(true)"
       (list)="showList.set(true)"
-      (alias)="openAlias()"
       (resources)="showResources.set(true)"
       (terms)="showTerms.set(true)"
       (contact)="showContact.set(true)"
       (setLocale)="i18n.setLocale($event)"
     />
+    <app-prefetch-banner />
 
     @if (showReport()) {
       <app-report-form
@@ -140,9 +144,10 @@ import type { Incident, IncidentCategory, IncidentType } from './shared/constant
   `],
 })
 export class App {
-  @ViewChild(MapComponent) mapComp?: MapComponent;
+  @ViewChild('map') mapComp?: MapComponent;
   private sync = inject(SyncEngineService);
   private seed = inject(SeedService);
+  private prefetch = inject(TilePrefetchService);
   private device = inject(DeviceIdService);
   readonly i18n = inject(I18nService);
 
@@ -167,6 +172,7 @@ export class App {
     if (!this.device.device().alias) {
       this.showAlias.set(true);
     }
+    this.prefetch.prefetchIfNeeded();
   }
 
   onReport(): void {
@@ -195,6 +201,10 @@ export class App {
 
   onLocate(): void {
     this.mapComp?.locate();
+  }
+
+  onDisasterZone(): void {
+    this.mapComp?.centerOnDisasterZone();
   }
 
   onSubmitted(): void {
