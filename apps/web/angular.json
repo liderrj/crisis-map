@@ -28,10 +28,7 @@
             "styles": [
               "src/styles.css"
             ],
-            "allowedCommonJsDependencies": [
-              "leaflet",
-              "leaflet.markercluster"
-            ]
+            "allowedCommonJsDependencies": []
           },
           "configurations": {
             "production": {

@@ -1,4 +1,3 @@
-import { divIcon } from 'leaflet';
 import type { Incident } from '../shared/constants';
 import { CATEGORY_COLOURS, categoryForType } from '../shared/constants';
 import { environment } from '../../environments/environment';
@@ -11,7 +10,7 @@ export function incidentMarkerIcon(incident: Incident, typeLabel: string) {
   dot.className = 'cm-marker-dot';
   dot.style.background = colour;
   dot.title = typeLabel;
-  return divIcon({
+  return L.divIcon({
     className: 'cm-marker',
     html: dot.outerHTML,
     iconSize: [22, 22],
@@ -36,7 +35,7 @@ export function pendingMarkerIcon(incident: PendingIncident, typeLabel: string) 
   dot.title = typeLabel;
   wrap.appendChild(ring);
   wrap.appendChild(dot);
-  return divIcon({
+  return L.divIcon({
     className: 'cm-marker cm-marker-pending-icon',
     html: wrap.outerHTML,
     iconSize: [32, 32],

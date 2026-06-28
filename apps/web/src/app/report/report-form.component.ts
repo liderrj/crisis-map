@@ -1,6 +1,5 @@
 import { Component, inject, output, signal, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import * as L from 'leaflet';
 import { DeviceIdService } from '../core/device-id.service';
 import { ImageUploadService } from './image-upload.service';
 import { StorageService } from '../core/storage.service';
