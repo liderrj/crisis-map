@@ -9,6 +9,14 @@ export interface IncidentQuery {
   confirmedOnly?: boolean;
   includeHidden?: boolean;
   limit?: number;
+  etag?: string;
+}
+
+export interface IncidentsResponse {
+  incidents: Incident[];
+  etag?: string;
+  notModified?: boolean;
+  rateLimited?: boolean;
 }
 
 export interface IncidentCreate {
@@ -56,7 +64,7 @@ export class ApiClientService {
     }
   }
 
-  async getIncidents(query: IncidentQuery): Promise<Incident[]> {
+  async getIncidents(query: IncidentQuery): Promise<IncidentsResponse> {
     const params = new URLSearchParams();
     if (query.bbox) params.set('bbox', query.bbox);
     if (query.type) params.set('type', query.type);
@@ -64,9 +72,20 @@ export class ApiClientService {
     if (query.includeHidden) params.set('includeHidden', 'true');
     if (query.limit) params.set('limit', String(query.limit));
 
-    const res = await fetch(`${this.base}/incidents?${params}`);
+    const headers: Record<string, string> = {};
+    if (query.etag) headers['If-None-Match'] = query.etag;
+
+    const res = await fetch(`${this.base}/incidents?${params}`, { headers });
+
+    if (res.status === 304) {
+      return { incidents: [], notModified: true };
+    }
+    if (res.status === 429) {
+      return { incidents: [], rateLimited: true };
+    }
+    const etag = res.headers.get('etag') ?? undefined;
     const data = await res.json();
-    return data.incidents ?? [];
+    return { incidents: data.incidents ?? [], etag };
   }
 
   async createIncident(input: IncidentCreate): Promise<CreateResult> {
@@ -95,6 +114,18 @@ export class ApiClientService {
     });
     const data = await res.json();
     return data.uploads ?? [];
+  }
+
+  private isValidUuid(id: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  }
+
+  async listImages(incidentId: string): Promise<string[]> {
+    if (!this.isValidUuid(incidentId)) return [];
+    const res = await fetch(`${this.base}/images?incidentId=${encodeURIComponent(incidentId)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.keys) ? data.keys : [];
   }
 
   async uploadImage(url: string, blob: Blob): Promise<boolean> {

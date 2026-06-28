@@ -11,22 +11,41 @@ export interface OutboxEntry {
   createdAt: number;
 }
 
+export interface PendingImage {
+  outboxId: string;
+  incidentId: string | null;
+  blobs: Blob[];
+  createdAt: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class StorageService {
   private dbPromise!: Promise<IDBPDatabase>;
 
   private async db(): Promise<IDBPDatabase> {
     if (!this.dbPromise) {
-      this.dbPromise = openDB('crisismap', 1, {
-        upgrade(db) {
-          if (!db.objectStoreNames.contains('incidents')) {
-            db.createObjectStore('incidents', { keyPath: 'incidentId' });
+      this.dbPromise = openDB('crisismap', 3, {
+        upgrade(db, oldVersion) {
+          if (oldVersion < 1) {
+            if (!db.objectStoreNames.contains('incidents')) {
+              db.createObjectStore('incidents', { keyPath: 'incidentId' });
+            }
+            if (!db.objectStoreNames.contains('outbox')) {
+              db.createObjectStore('outbox', { keyPath: 'id' });
+            }
+            if (!db.objectStoreNames.contains('device')) {
+              db.createObjectStore('device');
+            }
           }
-          if (!db.objectStoreNames.contains('outbox')) {
-            db.createObjectStore('outbox', { keyPath: 'id' });
+          if (oldVersion < 2) {
+            if (!db.objectStoreNames.contains('tiles')) {
+              db.createObjectStore('tiles');
+            }
           }
-          if (!db.objectStoreNames.contains('device')) {
-            db.createObjectStore('device');
+          if (oldVersion < 3) {
+            if (!db.objectStoreNames.contains('pendingImages')) {
+              db.createObjectStore('pendingImages', { keyPath: 'outboxId' });
+            }
           }
         },
       });
@@ -46,6 +65,21 @@ export class StorageService {
     return (await db.getAll('incidents')) as Incident[];
   }
 
+  async getIncident(incidentId: string): Promise<Incident | undefined> {
+    const db = await this.db();
+    return (await db.get('incidents', incidentId)) as Incident | undefined;
+  }
+
+  async putIncident(incident: Incident): Promise<void> {
+    const db = await this.db();
+    await db.put('incidents', incident);
+  }
+
+  async deleteIncident(incidentId: string): Promise<void> {
+    const db = await this.db();
+    await db.delete('incidents', incidentId);
+  }
+
   async addOutbox(entry: OutboxEntry): Promise<void> {
     const db = await this.db();
     await db.put('outbox', entry);
@@ -59,5 +93,36 @@ export class StorageService {
   async removeOutbox(id: string): Promise<void> {
     const db = await this.db();
     await db.delete('outbox', id);
+  }
+
+  async addPendingImage(entry: PendingImage): Promise<void> {
+    const db = await this.db();
+    await db.put('pendingImages', entry);
+  }
+
+  async getPendingImages(): Promise<PendingImage[]> {
+    const db = await this.db();
+    return (await db.getAll('pendingImages')) as PendingImage[];
+  }
+
+  async getPendingImage(outboxId: string): Promise<PendingImage | undefined> {
+    const db = await this.db();
+    return (await db.get('pendingImages', outboxId)) as PendingImage | undefined;
+  }
+
+  async deletePendingImage(outboxId: string): Promise<void> {
+    const db = await this.db();
+    await db.delete('pendingImages', outboxId);
+  }
+
+  async getKeyAsString(key: string): Promise<string | null> {
+    const db = await this.db();
+    const v = await db.get('tiles', key);
+    return typeof v === 'string' ? v : null;
+  }
+
+  async setKeyAsString(key: string, value: string): Promise<void> {
+    const db = await this.db();
+    await db.put('tiles', value, key);
   }
 }
