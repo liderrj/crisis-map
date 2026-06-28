@@ -57,3 +57,5 @@ tiles-out/
 # Personal / machine-specific dev scripts
 .specify/start-ng.ps1
 .specify/start-ng-serve.ps1
+
+.playwright-mcp/
