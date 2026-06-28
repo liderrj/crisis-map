@@ -86,7 +86,7 @@ export class CrisisMapStack extends cdk.Stack {
     const confirmationsFn = mkLambda('Confirmations', 'lambdas/confirmations/handler.handler');
     const resourcesFn = mkLambda('Resources', 'lambdas/resources/handler.handler');
     const legendFn = mkLambda('Legend', 'lambdas/legend/handler.handler');
-    const syncFn = mkLambda('Sync', 'lambdas/sync/handler.handler');
+    const syncFn = mkLambda('Sync', 'lambdas/sync/handler.handler', 30);
 
     const imagesFn = new lambda.Function(this, 'Images', {
       runtime: lambda.Runtime.NODEJS_20_X,

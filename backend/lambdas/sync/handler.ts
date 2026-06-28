@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { docClient, TABLES, putItem, updateItem } from '../../shared/db.js';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
 import { isValidIncidentType, isValidSeverity, categoryForType } from '../../shared/constants.js';
 import {
@@ -23,6 +23,7 @@ interface SyncOperation {
 }
 
 const MAX_OPERATIONS_PER_REQUEST = 100;
+const SYNC_CONCURRENCY = 10;
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   try {
@@ -41,23 +42,17 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return errorResponse(400, `Max ${MAX_OPERATIONS_PER_REQUEST} operations per request`);
     }
 
-    const results = [];
-    for (const op of operations) {
-      try {
-        if (op?.op === 'create_incident') {
-          const r = await applyCreate(op.payload as unknown as IncidentCreateInput, device);
-          results.push({ op: 'create_incident', ...r });
-        } else if (op?.op === 'confirm') {
-          const r = await applyConfirm(op.payload as { incidentId: string; action: string }, device);
-          results.push({ op: 'confirm', ...r });
-        } else {
-          results.push({ op: op?.op ?? 'unknown', status: 'error', message: 'Unknown operation' });
-        }
-      } catch (err) {
-        console.error('Sync op error:', err);
-        results.push({ op: op?.op ?? 'unknown', status: 'error', message: 'Operation failed' });
+    const results = await runBatch(operations, async (op) => {
+      if (op?.op === 'create_incident') {
+        const r = await applyCreate(op.payload as unknown as IncidentCreateInput, device);
+        return { op: 'create_incident', ...r };
       }
-    }
+      if (op?.op === 'confirm') {
+        const r = await applyConfirm(op.payload as { incidentId: string; action: string }, device);
+        return { op: 'confirm', ...r };
+      }
+      return { op: op?.op ?? 'unknown', status: 'error', message: 'Unknown operation' };
+    }, SYNC_CONCURRENCY);
 
     return jsonResponse(200, { results });
   } catch (err) {
@@ -92,7 +87,13 @@ async function applyCreate(
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const incidentId = randomUUID();
+  // Deterministic ID from type + geohash(6) (~600m cell) so concurrent
+  // creates of the same report write to the same item — the second
+  // putItem is an idempotent no-op, preventing duplicates.
+  const incidentId = createHash('sha256')
+    .update(`${input.type}:${geohash.slice(0, 6)}`)
+    .digest('hex')
+    .slice(0, 36);
   const incident: Incident = {
     incidentId,
     type: input.type,
@@ -164,6 +165,27 @@ async function applyConfirm(
   );
 
   return { status: 'applied', incidentId: payload.incidentId };
+}
+
+async function runBatch<T>(
+  items: T[],
+  fn: (item: T) => Promise<Record<string, unknown>>,
+  concurrency: number,
+): Promise<Record<string, unknown>[]> {
+  const results: Record<string, unknown>[] = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const batchResults = await Promise.allSettled(batch.map(fn));
+    for (const r of batchResults) {
+      if (r.status === 'fulfilled') {
+        results.push(r.value);
+      } else {
+        console.error('Sync op error:', r.reason);
+        results.push({ status: 'error', message: 'Operation failed' });
+      }
+    }
+  }
+  return results;
 }
 
 async function findDuplicate(type: string, geohash: string, lat: number, lng: number): Promise<Incident | null> {

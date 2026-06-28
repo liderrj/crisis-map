@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { docClient, TABLES, getItem, putItem, updateItem } from '../../shared/db.js';
-import { UpdateCommand, ScanCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
+import { UpdateCommand, QueryCommand, BatchGetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   EXPIRATION_WINDOW_SECONDS,
   isValidIncidentId,
@@ -27,17 +27,14 @@ async function handleList(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
     return errorResponse(400, 'Valid incidentId query parameter is required');
   }
 
-  // Confirmations is small per incident (one row per device) so a
-  // Scan with FilterExpression is fine. If this becomes hot we'd add
-  // a GSI on incidentId.
-  const scan = await docClient.send(
-    new ScanCommand({
+  const query = await docClient.send(
+    new QueryCommand({
       TableName: TABLES.confirmations,
-      FilterExpression: 'incidentId = :id',
+      KeyConditionExpression: 'incidentId = :id',
       ExpressionAttributeValues: { ':id': incidentId },
     }),
   );
-  const rows = (scan.Items ?? []) as Array<{
+  const rows = (query.Items ?? []) as Array<{
     deviceId: string;
     action: ConfirmationAction;
     createdAt: number;
