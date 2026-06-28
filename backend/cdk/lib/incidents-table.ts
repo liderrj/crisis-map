@@ -25,6 +25,14 @@ export class IncidentsTable extends Construct {
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
 
+    // TEMPORARY: kept during the geo-index-v2 migration. Will be removed
+    // once the backfill is complete (see backend/scripts/migrate-gsipk-v2.mjs).
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'geo-index',
+      partitionKey: { name: 'gsiPk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
+    });
+
     // Bbox queries: PK = first char of geohash (~32 shards), SK = geohash.
     // Sharding distributes load across partitions instead of one hot partition.
     this.table.addGlobalSecondaryIndex({
@@ -32,7 +40,5 @@ export class IncidentsTable extends Construct {
       partitionKey: { name: 'gsiPkV2', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
-
-    // Old geohash-createdAt-index removed after geo-index migration (Jun 2026).
   }
 }

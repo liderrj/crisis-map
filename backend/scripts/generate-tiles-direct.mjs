@@ -31,18 +31,23 @@ const OSM_SUBDOMAINS = ['a', 'b', 'c'];
 const ZONES = [
   {
     name: 'altamira',
-    bbox: { minLat: 10.480, maxLat: 10.520, minLng: -66.880, maxLng: -66.850 },
+    bbox: { minLat: 10.460, maxLat: 10.535, minLng: -66.950, maxLng: -66.840 },
     zooms: [11, 12, 13, 14, 15, 16],
   },
   {
     name: 'laguaira',
-    bbox: { minLat: 10.600, maxLat: 10.650, minLng: -66.930, maxLng: -66.900 },
+    bbox: { minLat: 10.535, maxLat: 10.690, minLng: -66.960, maxLng: -66.880 },
     zooms: [11, 12, 13, 14, 15, 16],
   },
   {
     name: 'disaster',
-    bbox: { minLat: 10.300, maxLat: 10.720, minLng: -67.050, maxLng: -66.550 },
-    zooms: [11, 12, 13],
+    bbox: { minLat: 10.200, maxLat: 10.800, minLng: -67.200, maxLng: -66.400 },
+    zooms: [10, 11, 12, 13, 14],
+  },
+  {
+    name: 'venezuela',
+    bbox: { minLat: 0.500, maxLat: 12.500, minLng: -73.000, maxLng: -59.500 },
+    zooms: [9],
   },
 ];
 
@@ -80,7 +85,7 @@ function tileUrl(z, x, y) {
   return `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
 }
 
-async function fetchWithRetry(url, attempts = 3) {
+async function fetchWithRetry(url, attempts = 5) {
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fetch(url, {
@@ -89,7 +94,13 @@ async function fetchWithRetry(url, attempts = 3) {
         },
       });
       if (res.ok) return Buffer.from(await res.arrayBuffer());
-      if (res.status === 404) return null; // empty tile (ocean, etc.)
+      // OSM sometimes returns 404 transiently (rate limiting, edge
+      // glitches). Retry with backoff instead of giving up.
+      if (res.status === 404 && i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        continue;
+      }
+      if (res.status === 404) return null;
       throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       if (i === attempts - 1) throw err;
