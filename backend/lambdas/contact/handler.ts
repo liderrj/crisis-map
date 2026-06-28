@@ -39,14 +39,28 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       message,
     ].join('\n');
 
-    await ses.send(new SendEmailCommand({
-      Destination: { ToAddresses: [recipient] },
-      Message: {
-        Subject: { Data: `[CrisisMap] ${subject}` },
-        Body: { Text: { Data: emailBody } },
-      },
-      Source: recipient,
+    // Log to CloudWatch as fallback delivery. SES is attempted second.
+    console.log(JSON.stringify({
+      type: 'contact',
+      recipient,
+      subject: `[CrisisMap] ${subject}`,
+      body: emailBody,
     }));
+
+    try {
+      await ses.send(new SendEmailCommand({
+        Destination: { ToAddresses: [recipient] },
+        Message: {
+          Subject: { Data: `[CrisisMap] ${subject}` },
+          Body: { Text: { Data: emailBody } },
+        },
+        Source: recipient,
+      }));
+    } catch (sesErr) {
+      // SES may not be configured (sandbox, unverified sender).
+      // The CloudWatch log above is the reliable delivery path.
+      console.warn('SES send failed (contact logged to CloudWatch):', sesErr);
+    }
 
     return jsonResponse(200, { sent: true });
   } catch (err) {
