@@ -27,7 +27,9 @@ export class ImageStorage extends Construct {
     });
 
     this.distribution = new cloudfront.Distribution(this, 'ImageCDN', {
-      defaultBehavior: { origin: origins.S3BucketOrigin.withBucketDefaults(this.bucket) },
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessControl(this.bucket),
+      },
       enabled: true,
     });
   }

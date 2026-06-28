@@ -1,13 +1,13 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { docClient, TABLES } from '../../shared/db.js';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { parseBbox, bboxToGeohashCells } from '../../shared/geo.js';
+import { parseBbox, coverBbox } from '../../shared/geo.js';
+import { GEO_INDEX_PK } from '../../shared/db.js';
 import { categoryForType } from '../../shared/constants.js';
 import { computeConfidence, type Incident } from '../../shared/types.js';
 import { jsonResponse, errorResponse } from '../../shared/headers.js';
 
 const MAX_BBOX_AREA_DEG2 = 25;
-const MAX_CELLS = 4000;
 const CONCURRENCY = 50;
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
@@ -25,15 +25,9 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
       return errorResponse(400, `bbox too large (max ${MAX_BBOX_AREA_DEG2} deg^2). Zoom in.`);
     }
 
-    const allCells = bboxToGeohashCells(bounds);
-    const centerLat = (bounds.minLat + bounds.maxLat) / 2;
-    const centerLng = (bounds.minLng + bounds.maxLng) / 2;
-    const sortedCells = allCells.slice().sort((a, b) => {
-      const da = a.charCodeAt(0) * 1000 + a.charCodeAt(1) - (centerLat * 10000 + centerLng * 10000);
-      const db = b.charCodeAt(0) * 1000 + b.charCodeAt(1) - (centerLat * 10000 + centerLng * 10000);
-      return Math.abs(da) - Math.abs(db);
-    });
-    const cells = sortedCells.slice(0, MAX_CELLS);
+    // Use precision 6 for performance (precision 7 produces 5× more prefixes
+    // without noticeable accuracy improvement for crisis response).
+    const prefixes = coverBbox(bounds, 6);
     const now = Math.floor(Date.now() / 1000);
     const limit = Math.min(parseInt(qs.limit ?? '100', 10), 200);
 
@@ -41,7 +35,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     const confirmedOnly = qs.confirmedOnly === 'true';
     const includeHidden = qs.includeHidden === 'true';
 
-    const results = await queryCellsInParallel(cells, CONCURRENCY);
+    const results = await queryPrefixesInParallel(prefixes, CONCURRENCY);
     const seen = new Set<string>();
     const incidents: Incident[] = [];
     for (const item of results) {
@@ -76,18 +70,21 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   }
 };
 
-async function queryCellsInParallel(cells: string[], concurrency: number): Promise<Incident[]> {
+async function queryPrefixesInParallel(prefixes: string[], concurrency: number): Promise<Incident[]> {
   const results: Incident[] = [];
-  for (let i = 0; i < cells.length; i += concurrency) {
-    const batch = cells.slice(i, i + concurrency);
+  for (let i = 0; i < prefixes.length; i += concurrency) {
+    const batch = prefixes.slice(i, i + concurrency);
     const res = await Promise.all(
-      batch.map(async (cell) => {
+      batch.map(async (prefix) => {
         const r = await docClient.send(
           new QueryCommand({
             TableName: TABLES.incidents,
-            IndexName: 'geohash-createdAt-index',
-            KeyConditionExpression: 'geohash = :gh',
-            ExpressionAttributeValues: { ':gh': cell },
+            IndexName: 'geo-index',
+            KeyConditionExpression: 'gsiPk = :pk AND begins_with(geohash, :prefix)',
+            ExpressionAttributeValues: {
+              ':pk': GEO_INDEX_PK,
+              ':prefix': prefix,
+            },
           }),
         );
         return (r.Items ?? []) as Incident[];

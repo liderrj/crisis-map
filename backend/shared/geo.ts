@@ -139,27 +139,43 @@ export function parseBbox(bbox: string): GeoBounds | null {
   return { minLat, minLng, maxLat, maxLng };
 }
 
-export function bboxToGeohashCells(bbox: GeoBounds, precision = 7): string[] {
-  const lngBits = Math.floor((precision * 5) / 2);
-  const latBits = precision * 5 - lngBits;
-  const cellLng = 360 / Math.pow(2, lngBits);
-  const cellLat = 180 / Math.pow(2, latBits);
-
-  // Step must be smaller than the smaller cell dimension to cover every cell.
-  // For precision 7 this is ~0.0007° lat and ~0.0028° lng.
-  const stepLng = cellLng / 2;
-  const stepLat = cellLat / 2;
-
-  const cells = new Set<string>();
-  for (let lat = bbox.minLat; lat <= bbox.maxLat + 1e-9; lat += stepLat) {
-    for (let lng = bbox.minLng; lng <= bbox.maxLng + 1e-9; lng += stepLng) {
-      cells.add(encodeGeohash(lat, lng, precision));
+export function coverBbox(bbox: GeoBounds, targetPrecision = 7): string[] {
+  const out: string[] = [];
+  // At root level, probe each of the 32 precision-1 cells
+  for (const c of BASE32) {
+    const cell = decodeGeohash(c);
+    if (cellOutside(cell.bounds, bbox)) continue;
+    if (cellContained(cell.bounds, bbox) || targetPrecision <= 1) {
+      out.push(c);
+    } else {
+      subdivide(bbox, c, targetPrecision - 1, out);
     }
   }
-  // Include the 4 corners explicitly.
-  cells.add(encodeGeohash(bbox.minLat, bbox.minLng, precision));
-  cells.add(encodeGeohash(bbox.minLat, bbox.maxLng, precision));
-  cells.add(encodeGeohash(bbox.maxLat, bbox.minLng, precision));
-  cells.add(encodeGeohash(bbox.maxLat, bbox.maxLng, precision));
-  return Array.from(cells);
+  return out;
+}
+
+function cellContained(cell: GeoBounds, bbox: GeoBounds): boolean {
+  return cell.minLng >= bbox.minLng
+      && cell.maxLng <= bbox.maxLng
+      && cell.minLat >= bbox.minLat
+      && cell.maxLat <= bbox.maxLat;
+}
+
+function cellOutside(cell: GeoBounds, bbox: GeoBounds): boolean {
+  return cell.maxLng < bbox.minLng
+      || cell.minLng > bbox.maxLng
+      || cell.maxLat < bbox.minLat
+      || cell.minLat > bbox.maxLat;
+}
+
+function subdivide(bbox: GeoBounds, prefix: string, remaining: number, out: string[]): void {
+  for (const c of BASE32) {
+    const cell = decodeGeohash(prefix + c);
+    if (cellOutside(cell.bounds, bbox)) continue;
+    if (cellContained(cell.bounds, bbox) || remaining <= 1) {
+      out.push(prefix + c);
+    } else {
+      subdivide(bbox, prefix + c, remaining - 1, out);
+    }
+  }
 }

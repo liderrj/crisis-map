@@ -60,6 +60,8 @@ export interface Incident {
   confirmations: number;
   negativeVotes: number;
   imageCount: number;
+  /** Fixed partition key for the geo-index GSI. */
+  gsiPk?: string;
 }
 
 export interface Confirmation {

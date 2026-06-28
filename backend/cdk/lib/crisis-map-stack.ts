@@ -46,6 +46,11 @@ export class CrisisMapStack extends cdk.Stack {
       resources: [`${images.bucket.bucketArn}/*`],
     });
 
+    const s3ListPolicy = new iam.PolicyStatement({
+      actions: ['s3:ListBucket'],
+      resources: [images.bucket.bucketArn],
+    });
+
     const baseEnv = {
       INCIDENTS_TABLE: incidents.table.tableName,
       CONFIRMATIONS_TABLE: confirmations.table.tableName,
@@ -86,6 +91,7 @@ export class CrisisMapStack extends cdk.Stack {
     });
     imagesFn.addToRolePolicy(sharedPolicy);
     imagesFn.addToRolePolicy(s3Policy);
+    imagesFn.addToRolePolicy(s3ListPolicy);
 
     const seedFn = new lambda.Function(this, 'Seed', {
       runtime: lambda.Runtime.NODEJS_20_X,
@@ -111,6 +117,7 @@ export class CrisisMapStack extends cdk.Stack {
     route('POST', '/incidents', createIncidentFn);
     route('POST', '/confirmations', confirmationsFn);
     route('POST', '/images', imagesFn);
+    route('GET', '/images', imagesFn);
     route('GET', '/resources', resourcesFn);
     route('GET', '/legend', legendFn);
     route('POST', '/sync', syncFn);

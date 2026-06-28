@@ -18,16 +18,21 @@ export class IncidentsTable extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    this.table.addGlobalSecondaryIndex({
-      indexName: 'geohash-createdAt-index',
-      partitionKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
-    });
-
+    // Duplicate-detection: lookup incident by (type, geohash).
     this.table.addGlobalSecondaryIndex({
       indexName: 'type-geohash-index',
       partitionKey: { name: 'type', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
+
+    // Bbox queries: PK is a fixed string, SK is the geohash. This makes
+    // begins_with() queries possible (O(log n) regardless of bbox size).
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'geo-index',
+      partitionKey: { name: 'gsiPk', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
+    });
+
+    // Old geohash-createdAt-index removed after geo-index migration (Jun 2026).
   }
 }

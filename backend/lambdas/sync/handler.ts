@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { docClient, TABLES, putItem, updateItem } from '../../shared/db.js';
+import { docClient, TABLES, putItem, updateItem, GEO_INDEX_PK } from '../../shared/db.js';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { randomUUID } from 'node:crypto';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
@@ -110,6 +110,7 @@ async function applyCreate(
     confirmations: 1,
     negativeVotes: 0,
     imageCount,
+    gsiPk: GEO_INDEX_PK,
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);

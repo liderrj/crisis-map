@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { randomUUID } from 'node:crypto';
-import { docClient, TABLES, putItem } from '../../shared/db.js';
-import { QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { docClient, TABLES, putItem, GEO_INDEX_PK } from '../../shared/db.js';
+import { QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
 import { isValidIncidentType, isValidSeverity, categoryForType } from '../../shared/constants.js';
 import {
@@ -13,7 +13,6 @@ import {
   type IncidentCreateInput,
 } from '../../shared/types.js';
 import { extractDeviceContext, jsonResponse, errorResponse, sanitize } from '../../shared/headers.js';
-import { PutCommand } from '@aws-sdk/lib-dynamodb';
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
   const device = extractDeviceContext(event.headers as Record<string, string | undefined>);
@@ -71,6 +70,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     confirmations: 1,
     negativeVotes: 0,
     imageCount: input.imageCount,
+    gsiPk: GEO_INDEX_PK,
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
