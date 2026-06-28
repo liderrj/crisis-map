@@ -59,11 +59,6 @@ export class CrisisMapStack extends cdk.Stack {
       resources: [images.bucket.bucketArn],
     });
 
-    const sesPolicy = new iam.PolicyStatement({
-      actions: ['ses:SendEmail'],
-      resources: ['*'],
-    });
-
     const baseEnv = {
       INCIDENTS_TABLE: incidents.table.tableName,
       CONFIRMATIONS_TABLE: confirmations.table.tableName,
@@ -125,9 +120,8 @@ export class CrisisMapStack extends cdk.Stack {
       handler: 'lambdas/contact/handler.handler',
       code: lambda.Code.fromAsset('../dist'),
       environment: { ...baseEnv, CONTACT_EMAIL: contactEmail },
+      description: 'v2',
     });
-    contactFn.addToRolePolicy(sesPolicy);
-
     const route = (method: string, path: string, fn: lambda.Function) => {
       new apigatewayv2.HttpRoute(this, `${method}${path}Route`, {
         httpApi: api.httpApi,
