@@ -1,4 +1,4 @@
-import { Component, output, signal, inject } from '@angular/core';
+import { Component, input, output, signal, inject, OnInit } from '@angular/core';
 import type { IncidentCategory } from '../shared/constants';
 import { CATEGORY_LABELS } from '../shared/constants';
 import { I18nService } from '../core/i18n.service';
@@ -31,12 +31,22 @@ import type { FilterState } from '../map/incident-layer.service';
     .cm-btn-ghost { background: #eee; color: #333; }
   `],
 })
-export class FiltersComponent {
+export class FiltersComponent implements OnInit {
   readonly i18n = inject(I18nService);
   readonly applyFilters = output<FilterState>();
   readonly close = output<void>();
+  readonly current = input<FilterState>({ categories: new Set(), confirmedOnly: false, types: new Set() });
   readonly sel = signal<FilterState>({ categories: new Set(), confirmedOnly: false, types: new Set() });
   readonly categories: IncidentCategory[] = ['emergency', 'infrastructure', 'service_interruption', 'resource', 'communications'];
+
+  ngOnInit(): void {
+    const c = this.current();
+    this.sel.set({
+      categories: new Set(c.categories),
+      confirmedOnly: c.confirmedOnly,
+      types: new Set(c.types),
+    });
+  }
 
   toggleCat(c: IncidentCategory): void {
     const s = this.sel();
