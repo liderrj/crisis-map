@@ -97,20 +97,27 @@ async function queryIncidents(
         const overallMin = rangeForPrefix(shardPrefixes[0]).min;
         const overallMax = rangeForPrefix(shardPrefixes[shardPrefixes.length - 1]).max;
 
-        const r = await docClient.send(
+const r = await docClient.send(
           new QueryCommand({
             TableName: TABLES.incidents,
             IndexName: 'geo-index-v2',
             KeyConditionExpression: 'gsiPkV2 = :shard AND geohash BETWEEN :min AND :max',
             FilterExpression: includeHidden ? undefined : '#s <> :resolved AND expiresAt > :now',
-            ExpressionAttributeNames: includeHidden ? undefined : { '#s': 'status' },
+            ExpressionAttributeNames: {
+              '#s': 'status',
+              '#t': 'type',
+              '#c': 'category',
+              '#sv': 'severity',
+              '#l': 'location',
+              '#d': 'description',
+            },
             ExpressionAttributeValues: {
               ':shard': shard,
               ':min': overallMin,
               ':max': overallMax,
               ...(includeHidden ? {} : { ':resolved': 'resolved', ':now': now }),
             },
-            ProjectionExpression: 'incidentId,#s,type,category,severity,location,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,description',
+            ProjectionExpression: 'incidentId,#s,#t,#c,#sv,#l,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,#d',
           }),
         );
         return (r.Items ?? []) as Incident[];
