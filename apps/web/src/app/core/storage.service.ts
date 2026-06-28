@@ -16,6 +16,8 @@ export interface PendingImage {
   incidentId: string | null;
   blobs: Blob[];
   createdAt: number;
+  /** How many times flushPendingFor has tried to upload this entry. */
+  attempts?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -121,6 +123,20 @@ export class StorageService {
     const existing = (await db.get('pendingImages', outboxId)) as PendingImage | undefined;
     if (!existing) return;
     existing.incidentId = incidentId;
+    await db.put('pendingImages', existing);
+  }
+
+  /**
+   * Bump the attempts counter on a pending image entry. Used by
+   * ImageUploadService to cap the number of retries before giving
+   * up on a permanently-failing entry (e.g. server rejected the
+   * upload URLs).
+   */
+  async setPendingImageAttempts(outboxId: string, attempts: number): Promise<void> {
+    const db = await this.db();
+    const existing = (await db.get('pendingImages', outboxId)) as PendingImage | undefined;
+    if (!existing) return;
+    existing.attempts = attempts;
     await db.put('pendingImages', existing);
   }
 

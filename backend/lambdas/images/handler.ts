@@ -35,8 +35,22 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const incident = await getItem<Incident>(TABLES.incidents, { incidentId: body.incidentId });
   if (!incident) return errorResponse(404, 'Incident not found');
 
-  if (incident.imageCount + count > MAX_IMAGE_COUNT) {
-    return errorResponse(400, `Maximum ${MAX_IMAGE_COUNT} images per incident`);
+  // Count actual objects already in S3 for this incident, not the
+  // incident.imageCount field. The field tracks the user's intent
+  // (set on creation); the actual upload count is the source of
+  // truth for "has this incident hit the limit". Using the field
+  // causes a re-upload attempt to always fail because the intent
+  // count was already counted at creation.
+  const existing = await s3.send(new ListObjectsV2Command({
+    Bucket: bucket,
+    Prefix: `${body.incidentId}/`,
+    MaxKeys: 1000,
+  }));
+  const existingCount = (existing.Contents ?? []).filter(
+    (o) => typeof o.Key === 'string' && o.Key.endsWith('.webp'),
+  ).length;
+  if (existingCount + count > MAX_IMAGE_COUNT) {
+    return errorResponse(400, `Maximum ${MAX_IMAGE_COUNT} images per incident (already ${existingCount})`);
   }
 
   const timestamp = Date.now();
