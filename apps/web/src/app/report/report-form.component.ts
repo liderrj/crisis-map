@@ -9,6 +9,7 @@ import { INCIDENT_TYPES, SEVERITIES, categoryForType } from '../shared/constants
 import type { Severity, IncidentType, Incident, IncidentCategory } from '../shared/constants';
 import { MAX_DESCRIPTION_LENGTH, MAX_IMAGE_COUNT } from '../shared/constants';
 import { environment } from '../../environments/environment';
+import { FallbackTileLayer, OSM_ATTRIBUTION } from '../map/fallback-tile-layer';
 
 const NOW_SEC = () => Math.floor(Date.now() / 1000);
 
@@ -185,8 +186,8 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
       zoom: 16,
       zoomControl: true,
     });
-    L.tileLayer(environment.tileUrl, {
-      attribution: '&copy; OpenStreetMap',
+    new FallbackTileLayer(environment.tileUrl, {
+      attribution: OSM_ATTRIBUTION,
       maxZoom: 19,
     }).addTo(map);
 

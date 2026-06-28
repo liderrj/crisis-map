@@ -93,13 +93,24 @@ export const MAX_DESCRIPTION_LENGTH = 500;
 
 // Caracas / La Guaira affected zone. Used by:
 // - the initial map centering (GPS-first, this as fallback)
-// - the regional offline tile prefetch (z=11..13, ~184 tiles)
+// - the regional offline tile prefetch
 // - the "Zona del desastre" FAB in the map controls
 export const DISASTER_ZONE = {
   center: [10.483, -66.833] as [number, number],
   zoom: 13,
-  bbox: { minLat: 10.30, maxLat: 10.72, minLng: -67.05, maxLng: -66.55 },
-  prefetchZooms: [11, 12, 13] as readonly number[],
+  // Caracas metro + Vargas state coast (La Guaira, Caraballeda, etc.)
+  bbox: { minLat: 10.20, maxLat: 10.80, minLng: -67.20, maxLng: -66.40 },
+  // z=10..13 covers Caracas-wide context. z=14 fills the gap between
+  // the wide coverage and the deep critical zones at z=15-16.
+  prefetchZooms: [10, 11, 12, 13, 14] as readonly number[],
+} as const;
+
+// Wider Venezuela bbox for country-level context at very low zoom.
+// Lets the user zoom out and still see the country.
+export const COUNTRY_ZONE = {
+  name: 'Venezuela',
+  bbox: { minLat: 0.50, maxLat: 12.50, minLng: -73.00, maxLng: -59.50 },
+  prefetchZooms: [9] as readonly number[],
 } as const;
 
 // Smaller, high-priority bboxes where we want street-level detail
@@ -113,12 +124,13 @@ export const CRITICAL_ZONES: ReadonlyArray<{
 }> = [
   {
     name: 'Altamira',
-    bbox: { minLat: 10.480, maxLat: 10.520, minLng: -66.880, maxLng: -66.850 },
+    // Expanded to overlap with La Guaira so there are no gaps at z=15-16
+    bbox: { minLat: 10.460, maxLat: 10.535, minLng: -66.950, maxLng: -66.840 },
     prefetchZooms: [11, 12, 13, 14, 15, 16],
   },
   {
     name: 'La Guaira capital',
-    bbox: { minLat: 10.600, maxLat: 10.650, minLng: -66.930, maxLng: -66.900 },
+    bbox: { minLat: 10.535, maxLat: 10.690, minLng: -66.960, maxLng: -66.880 },
     prefetchZooms: [11, 12, 13, 14, 15, 16],
   },
 ] as const;

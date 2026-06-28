@@ -7,6 +7,7 @@ import { NetworkService } from '../core/network.service';
 import { SyncEngineService } from '../core/sync-engine.service';
 import { DISASTER_ZONE, type Incident } from '../shared/constants';
 import { environment } from '../../environments/environment';
+import { FallbackTileLayer, OSM_ATTRIBUTION } from './fallback-tile-layer';
 
 const VZ_INITIAL_ZOOM = 11;
 const REFRESH_DEBOUNCE_MS = 1500;
@@ -73,8 +74,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       DISASTER_ZONE.zoom,
     );
     L.control.zoom({ position: 'topright' }).addTo(this.map);
-    L.tileLayer(environment.tileUrl, {
-      attribution: '&copy; OpenStreetMap',
+    new FallbackTileLayer(environment.tileUrl, {
+      attribution: OSM_ATTRIBUTION,
       maxZoom: 19,
     }).addTo(this.map);
 

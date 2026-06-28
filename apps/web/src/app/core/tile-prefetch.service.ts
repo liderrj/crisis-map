@@ -3,10 +3,11 @@ import { NetworkService } from './network.service';
 import {
   DISASTER_ZONE,
   CRITICAL_ZONES,
+  COUNTRY_ZONE,
 } from '../shared/constants';
 import { environment } from '../../environments/environment';
 
-const STORAGE_KEY = 'crisismap_tiles_prefetched_v2';
+const STORAGE_KEY = 'crisismap_tiles_prefetched_v3';
 const MAX_CONCURRENT = 10;
 
 function lngToTileX(lng: number, zoom: number): number {
@@ -78,6 +79,11 @@ export class TilePrefetchService {
         name: 'Disaster zone',
         bbox: DISASTER_ZONE.bbox,
         zooms: DISASTER_ZONE.prefetchZooms,
+      },
+      {
+        name: COUNTRY_ZONE.name,
+        bbox: COUNTRY_ZONE.bbox,
+        zooms: COUNTRY_ZONE.prefetchZooms,
       },
     ];
 

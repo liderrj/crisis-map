@@ -20,6 +20,8 @@ declare global {
     type ImageOverlay = Leaflet.ImageOverlay;
     type LayerGroup = Leaflet.LayerGroup;
     type FitBoundsOptions = Leaflet.FitBoundsOptions;
+    type Coords = Leaflet.Coords;
+    type DoneCallback = Leaflet.DoneCallback;
   }
 
   // eslint-disable-next-line no-var
