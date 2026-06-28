@@ -117,9 +117,16 @@ export class TilePrefetchService {
         try {
           // The Angular SW dataGroup "map-tiles" intercepts these
           // fetches and writes the response into its Cache API.
-          // We don't need to handle the response here — we just need
-          // the request to land so the SW can cache it.
-          await fetch(url, { signal: this.abortController?.signal });
+          // We use 'no-cors' because OSM tiles don't return
+          // Access-Control-Allow-Origin headers — a normal fetch
+          // would be blocked by CORS. 'no-cors' returns an opaque
+          // response that the SW still happily caches, and the
+          // browser later loads the same URL via <img> tags (which
+          // are not subject to CORS).
+          await fetch(url, {
+            mode: 'no-cors',
+            signal: this.abortController?.signal,
+          });
           done++;
         } catch {
           failed++;

@@ -17,7 +17,26 @@ const VIEWPORT_QUANTIZE_DEG = 0.01;
   selector: 'app-map',
   standalone: true,
   template: `<div #mapEl class="cm-map"></div>`,
-  styles: [`.cm-map { position: absolute; inset: 0; z-index: 0; }`],
+  styles: [`
+    .cm-map { position: absolute; inset: 0; z-index: 0; }
+
+    .cm-user-marker {
+      width: 18px; height: 18px;
+      background: #1976d2;
+      border: 3px solid #fff;
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(25, 118, 210, .6);
+      animation: cm-user-pulse 1.6s ease-out infinite;
+    }
+    @keyframes cm-user-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(25, 118, 210, .6); }
+      70%  { box-shadow: 0 0 0 16px rgba(25, 118, 210, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(25, 118, 210, 0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cm-user-marker { animation: none; box-shadow: 0 0 0 4px rgba(25, 118, 210, .4); }
+    }
+  `],
 })
 export class MapComponent implements AfterViewInit, OnDestroy {
   @ViewChild('mapEl', { static: true }) mapEl!: ElementRef<HTMLDivElement>;
@@ -186,18 +205,43 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   locate(): void {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      console.warn('Geolocation is not supported in this browser');
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        if (this.isInVenezuela(lat, lng)) {
-          this.map.setView([lat, lng], 15);
+        if (!this.isInVenezuela(lat, lng)) {
+          console.info(`User location outside Venezuela bbox (${lat}, ${lng})`);
+          return;
         }
+        this.map.setView([lat, lng], 15, { animate: true });
+        this.flashUserMarker(lat, lng);
       },
-      () => { },
-      { enableHighAccuracy: true, timeout: 8000 },
+      (err) => {
+        console.warn('Geolocation error:', err.code, err.message);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },
     );
+  }
+
+  /**
+   * Drop a temporary pulsing dot at the user's location so it's
+   * immediately visible after re-centering. Removed automatically
+   * after a few seconds.
+   */
+  private flashUserMarker(lat: number, lng: number): void {
+    const icon = L.divIcon({
+      className: 'cm-user-marker',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+    const marker = L.marker([lat, lng], { icon, interactive: false }).addTo(this.map);
+    setTimeout(() => {
+      this.map.removeLayer(marker);
+    }, 4000);
   }
 
   private isInVenezuela(lat: number, lng: number): boolean {
