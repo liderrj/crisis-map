@@ -101,7 +101,7 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
     .cm-type-opt.active { font-weight: 600; color: #1565c0; }
     .cm-type-opt-check { width: 16px; font-weight: 700; color: #2e7d32; flex: 0 0 auto; }
     .cm-map-wrap { border-radius: 8px; overflow: hidden; border: 2px solid #ccc; }
-    .cm-report-map { height: 200px; }
+    .cm-report-map { height: 45vh; min-height: 280px; max-height: 420px; }
     .cm-map-hint { margin: 4px 0 0; font-size: 12px; color: #888; text-align: center; font-weight: 400; }
     .cm-actions { display: flex; gap: 12px; margin-top: auto; }
     .cm-btn { flex: 1; padding: 16px; font-size: 18px; border: none; border-radius: 8px;
