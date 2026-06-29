@@ -24,6 +24,10 @@ export class CrisisMapStack extends cdk.Stack {
     if (!contactEmail) {
       throw new Error('CONTACT_EMAIL env var is required to deploy this stack');
     }
+    const contactAppPassword = process.env.CONTACT_APP_PASSWORD ?? '';
+    if (!contactAppPassword) {
+      throw new Error('CONTACT_APP_PASSWORD env var is required to deploy this stack');
+    }
 
     const incidents = new IncidentsTable(this, 'IncidentsTable');
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
@@ -120,8 +124,8 @@ export class CrisisMapStack extends cdk.Stack {
       memorySize: 512,
       handler: 'lambdas/contact/handler.handler',
       code: lambda.Code.fromAsset('../dist'),
-      environment: { ...baseEnv, CONTACT_EMAIL: contactEmail },
-      description: 'v2',
+      environment: { ...baseEnv, CONTACT_EMAIL: contactEmail, CONTACT_APP_PASSWORD: contactAppPassword },
+      description: 'v3',
     });
     const route = (method: string, path: string, fn: lambda.Function) => {
       new apigatewayv2.HttpRoute(this, `${method}${path}Route`, {

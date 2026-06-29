@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"const p=require('path');const f=require('fs');const src=p.join(__dirname,'..','node_modules','nodemailer');const dst=p.join(__dirname,'dist','node_modules','nodemailer');f.cpSync(src,dst,{recursive:true,force:true})\"",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -12,11 +12,13 @@
     "@aws-sdk/client-s3": "^3.700.0",
     "@aws-sdk/client-ses": "^3.1075.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
-    "@aws-sdk/s3-request-presigner": "^3.700.0"
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.0",
     "typescript": "~5.9.2"
