@@ -16,6 +16,26 @@ info:
       - `incidents:write`   - POST /v1/incidents, PATCH /v1/incidents/{id}
       - `confirmations:read`  - GET /v1/incidents/{id}/confirmations
       - `confirmations:write` - POST /v1/incidents/{id}/confirmations
+
+    ## Sandbox mode
+
+    Clients can be provisioned with `sandbox: true` for onboarding or
+    testing. A sandbox client is restricted as follows:
+
+      - Every `POST /v1/incidents` is forced to `isDemo: true`
+        regardless of what the body says. The citizen map never
+        shows these rows.
+      - `GET /v1/incidents` is auto-filtered to `source=partner:<id>`,
+        so the sandbox partner only sees their own writes.
+      - Detail / confirmation endpoints return 404 for incidents
+        outside that scope (we don't leak existence).
+      - `PATCH` is allowed on own demo rows only; foreign incidents
+        (real or otherwise) return 403.
+      - Votes via `POST /v1/incidents/{id}/confirmations` are
+        restricted to the partner's own demo incidents.
+
+    Sandbox is provisioned at create-time with `--sandbox` and can
+    be flipped later with `provision-oauth-client set-sandbox`.
   contact:
     name: CrisisMap
     url: https://github.com/liderrj/crisis-map
@@ -195,6 +215,9 @@ paths:
                   externalId: { type: string }
                   status: { type: string, enum: [active, resolved] }
                   createdAt: { type: integer }
+                  isDemo:
+                    type: boolean
+                    description: 'Always true for sandbox clients. Otherwise reflects whether the row was tagged as a demo-mode incident.'
                   images:
                     type: array
                     items:
@@ -420,6 +443,9 @@ components:
       properties:
         id: { type: string }
         scope: { type: string, enum: [read, write] }
+        sandbox:
+          type: boolean
+          description: True if this client is sandboxed; in that case writes are forced into the demo bucket and reads are restricted to the partner's own rows.
     Location:
       type: object
       required: [lat, lng]

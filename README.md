@@ -190,6 +190,236 @@ MIT — ver [LICENSE](./LICENSE).
 
 ---
 
+## Partner API — Manual de uso paso a paso
+
+Esta sección complementa la referencia rápida de arriba. Asume que
+ya tienes un `client_id` y `client_secret` provistos por el
+administrador (o que vas a usar `--sandbox` para auto-provisionarte
+uno — ver final).
+
+### 1. Obtén un Bearer token
+
+```bash
+curl -X POST https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET"
+```
+
+Respuesta (`200`):
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiJ9.eyJ...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "incidents:read incidents:write"
+}
+```
+
+Guarda `access_token`. Vence en 1 hora. Cuando recibas un `401` en
+cualquier endpoint, repite este paso (los tokens no son refreshables,
+solo client_credentials grant).
+
+### 2. Crea un incidente (idempotente)
+
+Recomendamos **siempre** enviar `externalId` — un identificador único
+en tu sistema. Si reintentas el mismo POST (por timeout de red, etc.),
+el servidor devuelve la fila existente con `idempotent: true` y no se
+crea un duplicado.
+
+```bash
+TOKEN="eyJhbGciOi..."
+curl -X POST https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "externalId": "ticket-12345",
+    "type": "fire",
+    "severity": "high",
+    "location": { "lat": 10.50, "lng": -66.91 },
+    "description": "Incendio reportado por bombero en turno",
+    "imageUrls": ["https://partner.cdn/foto1.jpg"],
+    "metadata": { "reporterName": "Cabo Pérez", "unit": "B-12" }
+  }'
+```
+
+Respuesta (`201`):
+```json
+{
+  "incidentId": "08b91fab-4028-48ac-b946-b1dd7158331c",
+  "externalId": "ticket-12345",
+  "status": "active",
+  "createdAt": 1782753966,
+  "isDemo": false,
+  "images": [
+    {
+      "sourceUrl": "https://partner.cdn/foto1.jpg",
+      "cdnUrl": "https://d5l3qvg3d9bnd.cloudfront.net/external/08b91fab.../0.jpg",
+      "key": "external/08b91fab.../0.jpg",
+      "contentType": "image/jpeg",
+      "size": 184320
+    }
+  ]
+}
+```
+
+Campos clave del body:
+- `type` — uno de los 21 `IncidentType` (ver `/v1/openapi.json`).
+- `severity` — `low`, `medium`, `high`.
+- `location` — `{lat, lng}` con `lat ∈ [-90, 90]`, `lng ∈ [-180, 180]`.
+- `imageUrls` — opcional, máx 3 URLs HTTPS públicas. El servidor las
+  descarga, valida contra SSRF (rechaza IPs privadas / loopback / AWS
+  metadata), y las rehostea en el CDN del proyecto. URLs `http://` o
+  IPs literales son rechazadas por imagen con `code: "protocol_not_https"`
+  o `"blocked_address"`. El incidente igual se crea con las imágenes
+  exitosas; las fallidas se reportan individualmente en `images[]`.
+- `metadata` — opcional, `Record<string, string|number|boolean>`.
+- `reportedAt` — opcional, epoch seconds. Si se omite, se usa `now`.
+
+`POST` puede devolver `200` con `idempotent: true` en lugar de `201`
+si el `externalId` ya existe — eso es **normal**, no es un error.
+
+### 3. Lista incidentes por viewport
+
+```bash
+curl "https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents?\
+bbox=-67.20,10.20,-66.40,10.80&type=fire,flood&severity=high&\
+since=1719500000&limit=100" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Parámetros (todos opcionales excepto `bbox` o `source`):
+
+| Param | Tipo | Notas |
+|---|---|---|
+| `bbox` | `minLng,minLat,maxLng,maxLat` | **Recomendado.** max 25 deg² (zoom continental). |
+| `source` | `partner:<partnerId>` | Alternativa a `bbox` para listar todo de un partner. |
+| `center` + `radius` | `lat,lng` + metros | Búsqueda radial. |
+| `type` | CSV | ej. `fire,flood,hospital` |
+| `category` | CSV | `emergency`, `infrastructure`, `service_interruption`, `resource`, `communications` |
+| `severity` | CSV | `low`, `medium`, `high` |
+| `status` | CSV | default `active`. Añade `resolved` para ver cerrados. |
+| `since` | epoch sec | `createdAt >= since` |
+| `until` | epoch sec | `createdAt <= until` |
+| `minConfidence` | int | `confirmations - negativeVotes >= N` |
+| `limit` | int 1-500 | default 100 |
+| `sort` | enum | `createdAt` (default), `updatedAt`, `confidence` |
+| `order` | enum | `desc` (default), `asc` |
+
+### 4. Detalle de un incidente
+
+```bash
+curl "https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents/$IID" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Incluye las confirmaciones embebidas y nunca expone `creatorDeviceId`
+(PII). En sandbox, devuelve `404` para incidentes que no son tuyos.
+
+### 5. Vota sobre un incidente
+
+```bash
+curl -X POST "https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents/$IID/confirmations" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "confirm",
+    "voterId": "cabo-perez",
+    "voterAlias": "Cabo Pérez"
+  }'
+```
+
+- `action`: `confirm`, `improved`, `worsened`, `no_longer_exists`.
+- `voterId`: tu identificador estable del votante (≤64 chars). El
+  servidor lo namespacia como `partner:<partnerId>:<voterId>` para
+  evitar colisiones entre partners. Dos votos del mismo `voterId`
+  sobre el mismo incidente devuelven `409`.
+
+### 6. Edita un incidente (solo tuyo)
+
+```bash
+curl -X PATCH "https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents/$IID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "resolved",
+    "description": "Atendido por bomberos a las 14:30",
+    "metadata": { "resolution": "extinguished" }
+  }'
+```
+
+Patchable: `severity`, `status`, `description`, `metadata`. Cualquier
+otro campo es ignorado. Devuelve `403` si el incidente pertenece a
+otro partner, o `404` si no existe / en sandbox no es tuyo.
+
+### 7. Sandbox mode (recomendado para integraciones nuevas)
+
+Si tu organización está explorando la API, pide al administrador que
+te aprovisione un client con `--sandbox`. Mientras esté activo:
+
+- Cada `POST /v1/incidents` se marca **automáticamente** como demo
+  (`isDemo: true`). El incidente no aparece en el mapa de ciudadanos.
+- `GET /v1/incidents` está filtrado a `source=partner:<tu-id>` — solo
+  ves lo que tú has escrito.
+- Detalle / votes / patch sobre incidentes ajenos devuelven `404`
+  (no leak de existencia).
+- No necesitas recordar el `externalId` para que un retry funcione;
+  la idempotencia cubre el flujo completo.
+
+Cuando termines las pruebas, el admin puede quitar el flag con:
+
+```bash
+node backend/scripts/provision-oauth-client.mjs set-sandbox \
+  --client-id tu-client-id --sandbox false
+```
+
+### 8. Errores comunes
+
+| HTTP | `code` | Causa probable | Solución |
+|---|---|---|---|
+| 400 | `bad_request` | Body mal formado, falta `type` o `location` | Validar JSON antes de enviar |
+| 401 | `unauthorized` | Token ausente, expirado o con firma inválida | Pedir token nuevo en `/v1/oauth/token` |
+| 403 | `insufficient_scope` | El token no tiene el scope necesario | Pedir token con `scope=incidents:read incidents:write` |
+| 403 | `forbidden` | Intentas editar un incidente que no creaste | Filtrar por `source=partner:<id>` |
+| 404 | `not_found` | El incidente no existe, o (en sandbox) no es tuyo | Verifica el ID |
+| 409 | `already_verified` | El `voterId` ya votó sobre este incidente | Usa otro `voterId` o no reintentes |
+| 500 | `internal_error` | Bug del servidor | Reportar al admin con el `RequestId` de CloudWatch |
+
+### 9. Auto-provisionarte un client sandbox (admin only)
+
+```bash
+$env:AWS_PROFILE="arkem"
+$env:OAUTH_CLIENTS_TABLE="CrisisMapStack-OAuthClientsTableOAuthClientsE7814F46-1038B61BLYTR0"
+
+# Crea un client sandbox que puede escribir incidentes demo
+node backend/scripts/provision-oauth-client.mjs create \
+  --name "Mi App" \
+  --partner-id mi-app \
+  --scopes "incidents:read incidents:write" \
+  --sandbox
+```
+
+La salida incluye `client_id` y `client_secret` (este último solo se
+imprime una vez — guárdalo en tu secret manager). Para detalles de
+los sub-comandos `rotate-secret`, `set-sandbox`, `disable`, `enable`,
+ver `node backend/scripts/provision-oauth-client.mjs`.
+
+### 10. Stack de referencia
+
+| Componente | Valor |
+|---|---|
+| Base URL | `https://y8mtov2nda.execute-api.us-east-1.amazonaws.com` |
+| OpenAPI spec | `GET /v1/openapi.json` (application/yaml) |
+| Swagger UI | `GET /v1/docs` |
+| TTL del token | 3600 s (1 h) |
+| Límite de página | 500 (default 100) |
+| Rate limit por client | 60 req/min (configurable al provisionar) |
+| Retención audit log | 90 días |
+| Rotación del JWT secret | `aws ssm put-parameter --name /crisismap/partner-api/jwt-signing-secret --type SecureString --value <new> --overwrite` — sin redeploy, máx 5 min para que todos los Lambda caches refresquen |
+
+---
+
 ## Partner API (v1)
 
 CrisisMap expone una API REST versionada para integraciones externas
