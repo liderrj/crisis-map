@@ -1,4 +1,4 @@
-import { Component, inject, output, signal, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, inject, output, signal, ViewChild, ElementRef, AfterViewInit, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DeviceIdService } from '../core/device-id.service';
 import { ImageUploadService } from './image-upload.service';
@@ -60,9 +60,26 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
         <textarea [(ngModel)]="description" [maxlength]="maxDesc" rows="2"></textarea>
       </label>
       <label>{{ i18n.t('report.photos', { max: maxImages }) }}
-        <div class="cm-photo-area">
-          <button type="button" class="cm-photo-btn" (click)="fileInput.click()">{{ i18n.t('report.addPhotos') }}</button>
-          <input #fileInput type="file" accept="image/*" multiple (change)="onFiles($event)" />
+        <div class="cm-photo-area" [class.cm-photo-area-mobile]="isMobile()">
+          @if (isMobile()) {
+            <button type="button" class="cm-photo-btn" (click)="cameraInput.click()">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="currentColor" d="M9 3l-1.5 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.5L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+              </svg>
+              {{ i18n.t('report.takePhoto') }}
+            </button>
+            <button type="button" class="cm-photo-btn" (click)="galleryInput.click()">
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                <path fill="currentColor" d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5L19 18H5l3.5-4.5z"/>
+              </svg>
+              {{ i18n.t('report.chooseFromGallery') }}
+            </button>
+            <input #cameraInput type="file" accept="image/*" capture="environment" (change)="onFiles($event)" />
+            <input #galleryInput type="file" accept="image/*" multiple (change)="onFiles($event)" />
+          } @else {
+            <button type="button" class="cm-photo-btn" (click)="fileInput.click()">{{ i18n.t('report.addPhotos') }}</button>
+            <input #fileInput type="file" accept="image/*" multiple (change)="onFiles($event)" />
+          }
         </div>
         @if (previews().length) {
           <div class="cm-photo-grid">
@@ -114,6 +131,8 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
     .cm-err { color: #d32f2f; }
     .cm-photo-area { display: flex; gap: 8px; align-items: center; }
     .cm-photo-area input[type=file] { display: none; }
+    .cm-photo-area-mobile { display: grid; grid-template-columns: 1fr 1fr; }
+    .cm-photo-area-mobile .cm-photo-btn { justify-content: center; }
     .cm-photo-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px;
       font-size: 15px; font-weight: 600; border: 2px dashed #aaa; border-radius: 8px;
       background: transparent; color: #555; cursor: pointer; }
@@ -129,7 +148,7 @@ const NOW_SEC = () => Math.floor(Date.now() / 1000);
     .cm-photo-del:hover { background: rgba(0,0,0,.8); }
   `],
 })
-export class ReportFormComponent implements AfterViewInit, OnDestroy {
+export class ReportFormComponent implements OnInit, AfterViewInit, OnDestroy {
   private device = inject(DeviceIdService);
   private images = inject(ImageUploadService);
   private storage = inject(StorageService);
@@ -145,6 +164,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   readonly error = signal('');
   readonly files = signal<Blob[]>([]);
   readonly previews = signal<string[]>([]);
+  readonly isMobile = signal(false);
   readonly maxImages = MAX_IMAGE_COUNT;
   readonly maxDesc = MAX_DESCRIPTION_LENGTH;
   readonly types = INCIDENT_TYPES;
@@ -163,6 +183,13 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   typeOpen = signal(false);
   selectedLabel(): string {
     return this.i18n.t('type.' + this.type) || this.types.find(t => t.type === this.type)?.label || this.type;
+  }
+
+  ngOnInit(): void {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const coarse = window.matchMedia('(pointer: coarse)').matches;
+    const narrow = window.matchMedia('(max-width: 768px)').matches;
+    this.isMobile.set(coarse || narrow);
   }
 
   ngAfterViewInit(): void {
