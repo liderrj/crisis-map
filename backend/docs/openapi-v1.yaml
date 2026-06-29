@@ -1,0 +1,475 @@
+openapi: 3.1.0
+info:
+  title: CrisisMap Partner API v1
+  version: 1.0.0
+  description: |
+    Read and write access to the CrisisMap incident dataset for external
+    integrations (fire departments, NGOs, newsrooms, other crisis
+    response platforms).
+
+    All endpoints require a Bearer token obtained from `/v1/oauth/token`
+    using the OAuth2 client_credentials grant. Tokens expire after 1 hour;
+    request a new one when the current one is rejected (401).
+
+    Scopes:
+      - `incidents:read`    - GET /v1/incidents, GET /v1/incidents/{id}
+      - `incidents:write`   - POST /v1/incidents, PATCH /v1/incidents/{id}
+      - `confirmations:read`  - GET /v1/incidents/{id}/confirmations
+      - `confirmations:write` - POST /v1/incidents/{id}/confirmations
+  contact:
+    name: CrisisMap
+    url: https://github.com/liderrj/crisis-map
+servers:
+  - url: https://y8mtov2nda.execute-api.us-east-1.amazonaws.com
+    description: Production
+tags:
+  - name: OAuth
+  - name: Incidents
+  - name: Confirmations
+  - name: Meta
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/oauth/token:
+    post:
+      tags: [OAuth]
+      summary: Exchange client_id + client_secret for a Bearer token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type: { type: string, enum: [client_credentials] }
+                client_id: { type: string }
+                client_secret: { type: string }
+                scope: { type: string, description: "Space-separated subset of allowed scopes" }
+          application/json:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type: { type: string, enum: [client_credentials] }
+                client_id: { type: string }
+                client_secret: { type: string }
+                scope: { type: string }
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in, scope]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  expires_in: { type: integer, description: Seconds until expiry }
+                  scope: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents by map viewport or by source partner
+      description: |
+        At least one of `bbox`, or `source=partner:<partnerId>` is required.
+        The endpoint will not return the entire dataset unfiltered.
+      parameters:
+        - $ref: '#/components/parameters/Bbox'
+        - in: query
+          name: geohash
+          schema: { type: string }
+          description: Not supported in v1 (use bbox).
+        - in: query
+          name: center
+          schema: { type: string, example: '10.50,-66.91' }
+          description: lat,lng. Must be paired with `radius`.
+        - in: query
+          name: radius
+          schema: { type: number, minimum: 1, example: 500 }
+          description: Meters. Must be paired with `center`.
+        - in: query
+          name: type
+          schema: { type: string, example: 'fire,flood' }
+          description: Comma-separated IncidentType values.
+        - in: query
+          name: category
+          schema: { type: string, example: 'emergency,resource' }
+        - in: query
+          name: severity
+          schema: { type: string, example: 'high' }
+        - in: query
+          name: status
+          schema: { type: string, example: 'active', default: 'active' }
+        - in: query
+          name: since
+          schema: { type: integer, description: 'Epoch seconds. createdAt >= since' }
+        - in: query
+          name: until
+          schema: { type: integer, description: 'Epoch seconds. createdAt <= until' }
+        - in: query
+          name: minConfidence
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: source
+          schema: { type: string, example: 'partner:bomberos-caracas' }
+        - in: query
+          name: demo
+          schema: { type: string, enum: ['0', '1'], default: '0' }
+          description: 'Set to 1 to include demo-mode incidents.'
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [createdAt, updatedAt, confidence], default: createdAt }
+        - in: query
+          name: order
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200':
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Incident' }
+                  count: { type: integer }
+                  partner: { $ref: '#/components/schemas/PartnerInfo' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+    post:
+      tags: [Incidents]
+      summary: Create a new incident from a partner system
+      description: |
+        Use `externalId` to make the request idempotent. Re-posting the
+        same `externalId` returns the original incident (200, idempotent
+        flag set). External image URLs are downloaded server-side and
+        rehosted on our CDN; if a download fails it is reported per
+        image in the response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, severity, location]
+              properties:
+                externalId: { type: string, description: 'Partner-side idempotency key.' }
+                type: { $ref: '#/components/schemas/IncidentType' }
+                severity: { $ref: '#/components/schemas/Severity' }
+                location: { $ref: '#/components/schemas/Location' }
+                description: { type: string, maxLength: 500 }
+                imageUrls:
+                  type: array
+                  maxItems: 3
+                  items: { type: string, format: uri }
+                source:
+                  type: string
+                  description: 'Overridden by server to "partner:<partnerId>".'
+                reportedAt: { type: integer, description: 'Epoch seconds; defaults to now.' }
+                metadata:
+                  type: object
+                  additionalProperties: { type: [string, number, boolean] }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidentId: { type: string, format: uuid }
+                  externalId: { type: string }
+                  status: { type: string, enum: [active, resolved] }
+                  createdAt: { type: integer }
+                  images:
+                    type: array
+                    items:
+                      oneOf:
+                        - type: object
+                          properties:
+                            sourceUrl: { type: string }
+                            cdnUrl: { type: string }
+                            key: { type: string }
+                            contentType: { type: string }
+                            size: { type: integer }
+                        - type: object
+                          properties:
+                            sourceUrl: { type: string }
+                            error:
+                              type: object
+                              properties:
+                                code: { type: string }
+                                message: { type: string }
+        '200':
+          description: Idempotent replay (existing incident returned)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidentId: { type: string, format: uuid }
+                  externalId: { type: string }
+                  status: { type: string }
+                  createdAt: { type: integer }
+                  idempotent: { type: boolean, enum: [true] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/incidents/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Incidents]
+      summary: Get a single incident with its confirmations
+      responses:
+        '200':
+          description: Incident detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Incident'
+                      - type: object
+                        properties:
+                          confirmations:
+                            type: array
+                            items: { $ref: '#/components/schemas/Confirmation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Incidents]
+      summary: Update severity, status, description or metadata
+      description: |
+        Only the partner that created the incident (matching `partnerId`
+        in the row) can patch it. Other partners get a 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                severity: { $ref: '#/components/schemas/Severity' }
+                status: { type: string, enum: [active, resolved] }
+                description: { type: string, maxLength: 500 }
+                metadata:
+                  type: object
+                  additionalProperties: { type: [string, number, boolean] }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Incident' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/incidents/{id}/confirmations:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Confirmations]
+      summary: List all confirmations for an incident
+      parameters:
+        - in: query
+          name: since
+          schema: { type: integer, description: 'Epoch seconds. createdAt >= since' }
+        - in: query
+          name: until
+          schema: { type: integer, description: 'Epoch seconds. createdAt <= until' }
+      responses:
+        '200':
+          description: Confirmations list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidentId: { type: string, format: uuid }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Confirmation' }
+                  count: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Confirmations]
+      summary: Record a verification action from a partner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, voterId]
+              properties:
+                action: { $ref: '#/components/schemas/ConfirmationAction' }
+                voterId: { type: string, maxLength: 64, description: 'Partner-side voter id' }
+                voterAlias: { type: string, maxLength: 30 }
+      responses:
+        '200':
+          description: Applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidentId: { type: string, format: uuid }
+                  confirmations: { type: integer }
+                  negativeVotes: { type: integer }
+                  confidence: { type: integer }
+                  status: { type: string, enum: [active, resolved] }
+                  expiresAt: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Voter already verified this incident
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/openapi.json:
+    get:
+      tags: [Meta]
+      summary: This OpenAPI 3.1 spec
+      security: []
+      responses:
+        '200':
+          description: Spec
+          content:
+            application/json: {}
+
+  /v1/docs:
+    get:
+      tags: [Meta]
+      summary: Swagger UI for the v1 API
+      security: []
+      responses:
+        '200':
+          description: HTML
+          content:
+            text/html: {}
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Bbox:
+      in: query
+      name: bbox
+      schema: { type: string, example: '-67.20,10.20,-66.40,10.80' }
+      description: 'minLng,minLat,maxLng,maxLat. Max 25 deg^2.'
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Invalid or missing token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Insufficient scope or wrong partner
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string }
+    PartnerInfo:
+      type: object
+      properties:
+        id: { type: string }
+        scope: { type: string, enum: [read, write] }
+    Location:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+    IncidentType:
+      type: string
+      enum: [people_trapped, building_collapse, damaged_building, fire, flood, road_blocked, bridge_damaged, landslide, gas_leak, hospital, shelter, food, water, medicine, electricity, fuel, internet, starlink, open_wifi, charging_point, other]
+    IncidentCategory:
+      type: string
+      enum: [emergency, infrastructure, service_interruption, resource, communications]
+    Severity:
+      type: string
+      enum: [low, medium, high]
+    IncidentStatus:
+      type: string
+      enum: [active, resolved]
+    ConfirmationAction:
+      type: string
+      enum: [confirm, improved, worsened, no_longer_exists]
+    Incident:
+      type: object
+      properties:
+        incidentId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/IncidentType' }
+        category: { $ref: '#/components/schemas/IncidentCategory' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        status: { $ref: '#/components/schemas/IncidentStatus' }
+        location: { $ref: '#/components/schemas/Location' }
+        geohash: { type: string }
+        description: { type: string }
+        createdAt: { type: integer }
+        updatedAt: { type: integer }
+        expiresAt: { type: integer }
+        creatorAlias: { type: string }
+        confirmations: { type: integer }
+        negativeVotes: { type: integer }
+        confidence: { type: integer }
+        imageCount: { type: integer }
+        source: { type: string, example: 'citizen' }
+        partnerId: { type: string, example: 'bomberos-caracas' }
+        externalId: { type: string }
+        isDemo: { type: boolean }
+        metadata:
+          type: object
+          additionalProperties: { type: [string, number, boolean] }
+    Confirmation:
+      type: object
+      properties:
+        deviceId: { type: string, description: 'For partner confirmations: "partner:<partnerId>:<voterId>".' }
+        action: { $ref: '#/components/schemas/ConfirmationAction' }
+        createdAt: { type: integer }
