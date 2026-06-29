@@ -1,11 +1,11 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { docClient, TABLES } from '../../shared/db.js';
+import { docClient, TABLES, getItem } from '../../shared/db.js';
 import { withPartnerAuth, jsonResponse, errorResponse } from '../../shared/auth.js';
-import { isValidIncidentId } from '../../shared/types.js';
+import { isValidIncidentId, type Incident } from '../../shared/types.js';
 
 export const handler = withPartnerAuth(
-  async (event): Promise<APIGatewayProxyResultV2> => {
+  async (event, auth): Promise<APIGatewayProxyResultV2> => {
     try {
       const id = event.pathParameters?.id;
       if (!id || !isValidIncidentId(id)) {
@@ -19,6 +19,15 @@ export const handler = withPartnerAuth(
       }
       if (until !== undefined && Number.isNaN(until)) {
         return errorResponse(400, 'Invalid until (epoch seconds)', 'bad_request');
+      }
+
+      // Sandbox partners can only fetch confirmations for demo
+      // incidents they own.
+      if (auth.client.sandbox) {
+        const incident = await getItem<Incident>(TABLES.incidents, { incidentId: id });
+        if (!incident || incident.partnerId !== auth.partnerId || incident.isDemo !== true) {
+          return errorResponse(404, 'Incident not found', 'not_found');
+        }
       }
 
       const exprValues: Record<string, unknown> = { ':id': id };

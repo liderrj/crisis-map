@@ -39,7 +39,7 @@ function generateClientId(partnerId) {
   return `${partnerId}-${randomBytes(6).toString('hex')}`;
 }
 
-async function create({ name, partnerId, scopes, rateLimit }) {
+async function create({ name, partnerId, scopes, rateLimit, sandbox }) {
   if (!name || !partnerId) {
     throw new Error('--name and --partner-id are required');
   }
@@ -56,10 +56,18 @@ async function create({ name, partnerId, scopes, rateLimit }) {
       scopes: scopes ?? ['incidents:read'],
       rateLimit: rateLimit ?? 60, // req/min
       enabled: true,
+      sandbox: sandbox === true,
       createdAt: now,
     },
   }));
-  return { clientId, clientSecret, partnerId, name, scopes: scopes ?? ['incidents:read'] };
+  return {
+    clientId,
+    clientSecret,
+    partnerId,
+    name,
+    scopes: scopes ?? ['incidents:read'],
+    sandbox: sandbox === true,
+  };
 }
 
 async function rotateSecret({ clientId }) {
@@ -85,6 +93,17 @@ async function setEnabled({ clientId, enabled }) {
     ExpressionAttributeValues: { ':b': enabled },
   }));
   return { clientId, enabled };
+}
+
+async function setSandbox({ clientId, sandbox }) {
+  if (!clientId) throw new Error('--client-id is required');
+  await doc.send(new UpdateCommand({
+    TableName: TABLE,
+    Key: { clientId },
+    UpdateExpression: 'SET sandbox = :b',
+    ExpressionAttributeValues: { ':b': sandbox },
+  }));
+  return { clientId, sandbox };
 }
 
 function printCreated(r) {
@@ -121,20 +140,39 @@ async function main() {
       'scopes': { type: 'string' },
       'rate-limit': { type: 'string' },
       'client-id': { type: 'string' },
+      // Bare flag for `create` (presence = sandbox on) and ignored
+      // for `set-sandbox` (which uses a positional arg).
+      'sandbox': { type: 'boolean', default: false },
     },
   });
 
   const cmd = positionals[0];
   if (!cmd) {
-    console.error('Usage: provision-oauth-client.mjs <create|rotate-secret|disable|enable> [flags]');
+    console.error('Usage: provision-oauth-client.mjs <create|rotate-secret|set-sandbox|disable|enable> [flags]');
     process.exit(2);
   }
   const scopes = values.scopes ? values.scopes.split(/\s+/).filter(Boolean) : undefined;
   const rateLimit = values['rate-limit'] ? Number.parseInt(values['rate-limit'], 10) : undefined;
+  // For `create`, sandbox is on when --sandbox was passed.
+  // For `set-sandbox`, the desired state is the first positional arg after the subcommand.
+  const sandbox = values.sandbox === true;
 
   if (cmd === 'create') {
-    const r = await create({ name: values.name, partnerId: values['partner-id'], scopes, rateLimit });
+    const r = await create({ name: values.name, partnerId: values['partner-id'], scopes, rateLimit, sandbox });
     printCreated(r);
+  } else if (cmd === 'set-sandbox') {
+    if (!values['client-id']) {
+      console.error('Usage: provision-oauth-client.mjs set-sandbox --client-id <id> <true|false>');
+      process.exit(2);
+    }
+    const desired = (positionals[1] ?? '').toLowerCase();
+    if (desired !== 'true' && desired !== 'false') {
+      console.error('set-sandbox requires a positional arg: `true` or `false`');
+      console.error('Example: provision-oauth-client.mjs set-sandbox --client-id foo true');
+      process.exit(2);
+    }
+    const r = await setSandbox({ clientId: values['client-id'], sandbox: desired === 'true' });
+    console.log(JSON.stringify(r, null, 2));
   } else if (cmd === 'rotate-secret') {
     const r = await rotateSecret({ clientId: values['client-id'] });
     printSecret(r);

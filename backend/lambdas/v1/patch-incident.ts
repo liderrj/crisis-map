@@ -39,6 +39,11 @@ export const handler = withPartnerAuth(
       if (existing.partnerId !== auth.partnerId) {
         return errorResponse(403, 'Incident belongs to a different partner', 'forbidden');
       }
+      // Sandbox partners are additionally limited to their own demo
+      // rows. Anything else returns 404 (we don't leak existence).
+      if (auth.client.sandbox && existing.isDemo !== true) {
+        return errorResponse(404, 'Incident not found', 'not_found');
+      }
 
       // Validate patch fields.
       const setParts: string[] = ['updatedAt = :now'];

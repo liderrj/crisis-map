@@ -41,6 +41,11 @@ export const handler = withPartnerAuth(
       const incident = await getItem<Incident>(TABLES.incidents, { incidentId });
       if (!incident) return errorResponse(404, 'Incident not found', 'not_found');
 
+      // Sandbox partners can only confirm their own demo incidents.
+      if (auth.client.sandbox && (incident.partnerId !== auth.partnerId || incident.isDemo !== true)) {
+        return errorResponse(404, 'Incident not found', 'not_found');
+      }
+
       // The composite key uses the partner-prefixed voterId so a
       // partner cannot double-vote on the same incident.
       const externalDeviceId = `partner:${auth.partnerId}:${body.voterId}`;

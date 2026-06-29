@@ -10,6 +10,16 @@ export const handler = withPartnerAuth(
       const qs = (event.queryStringParameters ?? {}) as Record<string, string | undefined>;
       const filters = parseFilters(qs);
 
+      // Sandbox-mode partners only see their own demo data. We force
+      // `includeDemo` true and `source=partner:<id>` so the listing
+      // route uses partner-source-index rather than the bbox geo index.
+      // Partners can still pass bbox, but the result is restricted to
+      // their demo rows.
+      if (auth.client.sandbox) {
+        filters.includeDemo = true;
+        filters.source = `partner:${auth.partnerId}`;
+      }
+
       // Scope: read is required. Without `incidents:read` the withPartnerAuth
       // wrapper has already 403'd.
       const result = await listIncidents(filters);
@@ -23,7 +33,11 @@ export const handler = withPartnerAuth(
       return jsonResponse(200, {
         data: enriched,
         count: enriched.length,
-        partner: { id: auth.partnerId, scope: hasScope(auth, 'incidents:write') ? 'write' : 'read' },
+        partner: {
+          id: auth.partnerId,
+          scope: hasScope(auth, 'incidents:write') ? 'write' : 'read',
+          sandbox: auth.client.sandbox || undefined,
+        },
       });
     } catch (e) {
       if (e instanceof BadRequest) return errorResponse(400, e.message, 'bad_request');

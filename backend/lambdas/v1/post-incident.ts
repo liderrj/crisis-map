@@ -111,6 +111,12 @@ export const handler = withPartnerAuth(
       const reportedAt = body.reportedAt && body.reportedAt > 0 ? body.reportedAt : now;
       const geohash = encodeGeohash(body.location.lat, body.location.lng);
 
+      // Sandbox-mode partners always write into the demo bucket. Their
+      // incidents are hidden from non-demo sessions and never appear on
+      // the citizen map. The client cannot opt out of this; it's set
+      // server-side based on the OAuthClientsTable row.
+      const isDemo = auth.client.sandbox;
+
       const incident: Incident = {
         incidentId,
         type: body.type,
@@ -136,6 +142,7 @@ export const handler = withPartnerAuth(
         externalId: body.externalId,
         externalKey: body.externalId ? `${auth.partnerId}#${body.externalId}` : undefined,
         metadata: body.metadata,
+        isDemo: isDemo ? true : undefined,
       };
 
       // Put with conditional create: if a concurrent request beat us to
@@ -189,6 +196,7 @@ export const handler = withPartnerAuth(
         externalId: body.externalId,
         status: 'active',
         createdAt: reportedAt,
+        isDemo: isDemo || undefined,
         images: imageResults,
       });
     } catch (e) {

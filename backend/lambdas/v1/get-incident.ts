@@ -7,7 +7,7 @@ import { categoryForType } from '../../shared/constants.js';
 import { computeConfidence } from '../../shared/types.js';
 
 export const handler = withPartnerAuth(
-  async (event): Promise<APIGatewayProxyResultV2> => {
+  async (event, auth): Promise<APIGatewayProxyResultV2> => {
     try {
       const id = event.pathParameters?.id;
       if (!id || !isValidIncidentId(id)) {
@@ -17,6 +17,17 @@ export const handler = withPartnerAuth(
       const incident = await getItem<Record<string, unknown>>(TABLES.incidents, { incidentId: id });
       if (!incident) {
         return errorResponse(404, 'Incident not found', 'not_found');
+      }
+
+      // Sandbox partners can only see demo incidents belonging to
+      // their own partner. We return 404 (not 403) so we don't leak
+      // the existence of non-sandbox rows.
+      if (auth.client.sandbox) {
+        const isOwn = incident.partnerId === auth.partnerId;
+        const isDemo = incident.isDemo === true;
+        if (!isOwn || !isDemo) {
+          return errorResponse(404, 'Incident not found', 'not_found');
+        }
       }
 
       // Fetch confirmations in parallel. We don't project the citizen
