@@ -1,5 +1,8 @@
 import { Component, output, signal, inject } from '@angular/core';
 import { I18nService } from '../core/i18n.service';
+import { BUILD_VERSION } from '../core/build-info';
+
+const REPO_URL = 'https://github.com/liderrj/crisis-map/commit/';
 
 @Component({
   selector: 'app-terms',
@@ -257,6 +260,15 @@ import { I18nService } from '../core/i18n.service';
                 plataforma es enteramente voluntario y bajo su propio riesgo.
               </strong></p>
             </section>
+
+            <section class="cm-version">
+              <p>
+                <span>{{ i18n.t('common.version') }}</span>
+                <a [href]="versionCommitUrl()" target="_blank" rel="noopener" class="cm-version-hash"
+                  >{{ buildVersion }}</a
+                >
+              </p>
+            </section>
           </div>
 
           <footer>
@@ -308,6 +320,18 @@ import { I18nService } from '../core/i18n.service';
       padding: 12px 14px; border-radius: 4px; margin: 12px 0;
     }
     .cm-first-launch p { margin: 0; }
+    .cm-version {
+      margin-top: 8px; padding-top: 12px; border-top: 1px solid #eee;
+    }
+    .cm-version p {
+      margin: 0; font-size: 12px; color: #888;
+      display: flex; align-items: center; gap: 8px; justify-content: center;
+    }
+    .cm-version-hash {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #1976d2; text-decoration: none; font-weight: 600;
+    }
+    .cm-version-hash:hover { text-decoration: underline; }
     footer {
       padding: 16px 24px; border-top: 1px solid #ddd; background: #fafafa;
       position: sticky; bottom: 0;
@@ -330,8 +354,13 @@ import { I18nService } from '../core/i18n.service';
 })
 export class TermsComponent {
   readonly i18n = inject(I18nService);
+  readonly buildVersion = (BUILD_VERSION as string) === 'dev' ? 'dev' : BUILD_VERSION.slice(0, 7);
   readonly close = output<void>();
   readonly accepted = signal(false);
+
+  versionCommitUrl(): string {
+    return (BUILD_VERSION as string) === 'dev' ? '#' : REPO_URL + BUILD_VERSION;
+  }
 
   toggleAccept(e: Event): void {
     this.accepted.set((e.target as HTMLInputElement).checked);

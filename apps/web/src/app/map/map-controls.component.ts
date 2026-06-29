@@ -1,5 +1,6 @@
 import { Component, output, inject, signal } from '@angular/core';
 import { I18nService } from '../core/i18n.service';
+import { BUILD_VERSION } from '../core/build-info';
 
 @Component({
   selector: 'app-map-controls',
@@ -88,6 +89,10 @@ import { I18nService } from '../core/i18n.service';
             <button (click)="setLangAndClose('pt')" [class.active]="i18n.locale() === 'pt'">PT</button>
           </div>
         </div>
+
+        <footer class="cm-menu-version" [attr.title]="'#' + buildVersion">
+          {{ i18n.t('common.version') }} <span class="cm-menu-version-hash">{{ buildVersion }}</span>
+        </footer>
       </div>
     }
   `,
@@ -168,10 +173,25 @@ import { I18nService } from '../core/i18n.service';
     .cm-menu-lang-buttons button.active {
       background: #1976d2; color: #fff; border-color: #1976d2;
     }
+    .cm-menu-version {
+      padding: 10px 18px;
+      border-top: 1px solid #eee;
+      background: #fafafa;
+      font-size: 12px;
+      color: #888;
+      text-align: center;
+      letter-spacing: .3px;
+    }
+    .cm-menu-version-hash {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #555;
+      margin-left: 4px;
+    }
   `],
 })
 export class MapControlsComponent {
   readonly i18n = inject(I18nService);
+  readonly buildVersion = (BUILD_VERSION as string) === 'dev' ? 'dev' : BUILD_VERSION.slice(0, 7);
   readonly menuOpen = signal(false);
 
   readonly report = output<void>();

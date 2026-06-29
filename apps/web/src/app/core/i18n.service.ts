@@ -172,6 +172,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'common.cancel': 'Cancelar',
     'common.close': 'Cerrar',
+    'common.version': 'Versión',
     'common.error': 'Error',
 
     'cat.emergency': 'Emergencia',
@@ -370,6 +371,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'common.cancel': 'Cancel',
     'common.close': 'Close',
+    'common.version': 'Version',
     'common.error': 'Error',
 
     'cat.emergency': 'Emergency',
@@ -568,6 +570,7 @@ const TRANSLATIONS: Record<Locale, Record<string, string>> = {
 
     'common.cancel': 'Cancelar',
     'common.close': 'Fechar',
+    'common.version': 'Versão',
     'common.error': 'Erro',
 
     'cat.emergency': 'Emergência',
