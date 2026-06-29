@@ -3,6 +3,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as apigateway2Integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import { IncidentsTable } from './incidents-table';
 import { ConfirmationsTable } from './confirmations-table';
@@ -31,13 +32,16 @@ export class CrisisMapStack extends cdk.Stack {
       throw new Error('CONTACT_APP_PASSWORD env var is required to deploy this stack');
     }
 
-    // Partner API JWT signing secret. Loaded from env (deploy-time) and
-    // exposed to Lambdas as JWT_SIGNING_SECRET. Rotating requires a
-    // redeploy; for MVP this is acceptable.
-    const jwtSecret = process.env.JWT_SIGNING_SECRET ?? '';
-    if (!jwtSecret || jwtSecret.length < 32) {
-      throw new Error('JWT_SIGNING_SECRET env var is required (>=32 chars) to deploy this stack');
-    }
+    // Partner API JWT signing secret. Stored in SSM Parameter Store
+    // (SecureString) so it never lives in the deploy-time env, in the
+    // CDK source, or in the CloudFormation template. To rotate: run
+    //   aws ssm put-parameter --name "/crisismap/partner-api/jwt-signing-secret" \
+    //     --type SecureString --value "<new 32+ char secret>" --overwrite
+    // then `cdk deploy` again. Tokens issued with the old secret become
+    // invalid as soon as the Lambdas restart.
+    const jwtSecretParam = ssm.StringParameter.fromSecureStringParameterAttributes(
+      this, 'JwtSigningSecret', { parameterName: '/crisismap/partner-api/jwt-signing-secret' },
+    );
 
     const incidents = new IncidentsTable(this, 'IncidentsTable');
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
@@ -105,11 +109,16 @@ export class CrisisMapStack extends cdk.Stack {
       IMAGE_CDN_URL: `https://${images.distribution.distributionDomainName}`,
     };
 
+    // The JWT secret is NOT in partnerEnv. Instead each partner Lambda
+    // gets `grantRead(jwtSecretParam)` and resolves the value at cold
+    // start via the SSM GetParameter API. This keeps the secret out of
+    // the Lambda's env-var payload (which shows up in plaintext in the
+    // AWS console) and lets us rotate the value without redeploying.
     const partnerEnv = {
       ...baseEnv,
       OAUTH_CLIENTS_TABLE: oauthClients.table.tableName,
       EXTERNAL_ACTIONS_TABLE: externalActions.table.tableName,
-      JWT_SIGNING_SECRET: jwtSecret,
+      JWT_SECRET_PARAM: jwtSecretParam.parameterName,
     };
 
     const mkLambda = (name: string, handler: string, timeoutSec = 15): lambda.Function => {
@@ -184,7 +193,10 @@ export class CrisisMapStack extends cdk.Stack {
       description: 'v3',
     });
 
-    // Partner API v1 Lambdas.
+    // Partner API v1 Lambdas. Each one reads the JWT secret from SSM
+    // (grantRead attached) rather than receiving it as an env var, so
+    // the value never appears in the AWS console and rotates without
+    // a redeploy (after the 5 min cache TTL).
     const oauthFn = mkPartnerLambda('OAuth', 'lambdas/oauth/handler.handler');
     const getIncidentsV1Fn = mkPartnerLambda('GetIncidentsV1', 'lambdas/v1/get-incidents.handler', 30);
     const getIncidentV1Fn = mkPartnerLambda('GetIncidentV1', 'lambdas/v1/get-incident.handler');
@@ -193,6 +205,9 @@ export class CrisisMapStack extends cdk.Stack {
     const patchIncidentV1Fn = mkPartnerLambda('PatchIncidentV1', 'lambdas/v1/patch-incident.handler');
     const postConfirmationV1Fn = mkPartnerLambda('PostConfirmationV1', 'lambdas/v1/post-confirmation.handler');
     const openapiFn = mkPartnerLambda('OpenapiV1', 'lambdas/v1/openapi.handler');
+    for (const fn of [oauthFn, getIncidentsV1Fn, getIncidentV1Fn, getConfirmationsV1Fn, postIncidentV1Fn, patchIncidentV1Fn, postConfirmationV1Fn, openapiFn]) {
+      jwtSecretParam.grantRead(fn);
+    }
 
     // Lambdas that rehost images need S3 write access.
     postIncidentV1Fn.addToRolePolicy(s3Policy);

@@ -1,9 +1,11 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import { createHash, randomBytes } from 'node:crypto';
 
 const ISSUER = 'crisismap';
 const AUDIENCE = 'partner-api-v1';
 const TOKEN_TTL_SEC = 3600; // 1h
+const SECRET_TTL_MS = 5 * 60 * 1000; // refresh the in-memory cache every 5 min
 
 export interface PartnerClaims extends JWTPayload {
   /** OAuth client_id of the calling partner. */
@@ -14,12 +16,27 @@ export interface PartnerClaims extends JWTPayload {
   scopes: string[];
 }
 
-function getSecret(): Uint8Array {
-  const s = process.env.JWT_SIGNING_SECRET;
-  if (!s || s.length < 32) {
-    throw new Error('JWT_SIGNING_SECRET env var is missing or too short (need >=32 chars)');
+// SSM client. We instantiate it once per Lambda container; subsequent
+// reads come from the in-memory cache so we don't pay the SSM RTT on
+// every JWT operation.
+const ssm = new SSMClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
+let cachedSecret: { value: Uint8Array; expiresAt: number } | null = null;
+
+async function loadSecret(): Promise<Uint8Array> {
+  const now = Date.now();
+  if (cachedSecret && cachedSecret.expiresAt > now) return cachedSecret.value;
+
+  const paramName = process.env.JWT_SECRET_PARAM ?? '/crisismap/partner-api/jwt-signing-secret';
+  const res = await ssm.send(new GetParameterCommand({
+    Name: paramName,
+    WithDecryption: true,
+  }));
+  const value = res.Parameter?.Value;
+  if (!value || value.length < 32) {
+    throw new Error(`JWT secret at ${paramName} is missing or too short (need >=32 chars)`);
   }
-  return new TextEncoder().encode(s);
+  cachedSecret = { value: new TextEncoder().encode(value), expiresAt: now + SECRET_TTL_MS };
+  return cachedSecret.value;
 }
 
 /**
@@ -45,7 +62,7 @@ export async function signPartnerToken(
     .setAudience(AUDIENCE)
     .setIssuedAt(now)
     .setExpirationTime(now + TOKEN_TTL_SEC)
-    .sign(getSecret());
+    .sign(await loadSecret());
 
   return { token, expiresIn: TOKEN_TTL_SEC, scope: granted.join(' ') };
 }
@@ -55,7 +72,7 @@ export async function signPartnerToken(
  * (expired, bad signature, wrong issuer/audience, etc.).
  */
 export async function verifyPartnerToken(token: string): Promise<PartnerClaims> {
-  const { payload } = await jwtVerify(token, getSecret(), {
+  const { payload } = await jwtVerify(token, await loadSecret(), {
     issuer: ISSUER,
     audience: AUDIENCE,
   });
