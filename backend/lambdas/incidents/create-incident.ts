@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { randomUUID } from 'node:crypto';
-import { docClient, TABLES, putItem } from '../../shared/db.js';
-import { QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import { docClient, TABLES, getItem, putItem } from '../../shared/db.js';
+import { QueryCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
 import { isValidIncidentType, isValidSeverity, categoryForType } from '../../shared/constants.js';
 import {
@@ -9,8 +9,10 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_IMAGE_COUNT,
   DUPLICATE_RADIUS_METERS,
+  DEMO_INCIDENT_LIMIT,
   type Incident,
   type IncidentCreateInput,
+  type Device,
 } from '../../shared/types.js';
 import { extractDeviceContext, jsonResponse, errorResponse, sanitize } from '../../shared/headers.js';
 
@@ -39,6 +41,24 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
   }
   if (typeof input.imageCount !== 'number' || input.imageCount < 0 || input.imageCount > MAX_IMAGE_COUNT) {
     input.imageCount = 0;
+  }
+
+  const isDemo = input.isDemo === true;
+
+  // Demo-mode quota: refuse if the device already hit the cap. We do this
+  // before duplicate-detection / write so a denied attempt does not
+  // consume a slot. The counter is then incremented only after the
+  // incident is successfully written.
+  if (isDemo) {
+    const existing = await getItem<Device>(TABLES.devices, { deviceId: device.deviceId });
+    const used = existing?.demoIncidentsCreated ?? 0;
+    if (used >= DEMO_INCIDENT_LIMIT) {
+      return errorResponse(
+        403,
+        `Demo incident limit reached (${used}/${DEMO_INCIDENT_LIMIT})`,
+        'demo_limit_reached',
+      );
+    }
   }
 
   const geohash = encodeGeohash(input.location.lat, input.location.lng);
@@ -71,24 +91,42 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     negativeVotes: 0,
     imageCount: input.imageCount,
     gsiPkV2: geohash[0],
+    isDemo: isDemo ? true : undefined,
   };
 
   await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
 
+  // Upsert device + bump counter atomically if demo. Non-demo creates
+  // simply refresh the alias/lastSeen fields.
   try {
-    await docClient.send(
-      new PutCommand({
-        TableName: TABLES.devices,
-        Item: {
-          deviceId: device.deviceId,
-          alias: device.alias ?? '',
-          createdAt: now,
-          lastSeenAt: now,
-        },
-      }),
-    );
-  } catch (err) {
-    if ((err as Error).name !== 'ConditionalCheckFailedException') throw err;
+    if (isDemo) {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: TABLES.devices,
+          Key: { deviceId: device.deviceId },
+          UpdateExpression: 'SET alias = :alias, lastSeen = :now ADD demoIncidentsCreated :one',
+          ExpressionAttributeValues: {
+            ':alias': device.alias ?? '',
+            ':now': now,
+            ':one': 1,
+          },
+        }),
+      );
+    } else {
+      await docClient.send(
+        new PutCommand({
+          TableName: TABLES.devices,
+          Item: {
+            deviceId: device.deviceId,
+            alias: device.alias ?? '',
+            createdAt: now,
+            lastSeen: now,
+          },
+        }),
+      );
+    }
+  } catch {
+    // best-effort upsert — never fail the create because device bookkeeping hiccuped
   }
 
   return jsonResponse(201, {
@@ -98,6 +136,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     negativeVotes: 0,
     createdAt: now,
     expiresAt: incident.expiresAt,
+    isDemo: incident.isDemo,
   });
 };
 

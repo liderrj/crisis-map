@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { DeviceIdService } from './device-id.service';
+import { DemoModeService } from './demo-mode.service';
 import type { Incident, IncidentType, Severity, ConfirmationAction, Location } from '../shared/constants';
 
 export interface IncidentQuery {
@@ -50,6 +51,7 @@ export interface UploadUrl {
 @Injectable({ providedIn: 'root' })
 export class ApiClientService {
   private device = inject(DeviceIdService);
+  private demoMode = inject(DemoModeService);
   private readonly base = environment.apiUrl;
 
   private headers(json = true): Record<string, string> {
@@ -60,6 +62,21 @@ export class ApiClientService {
     if (alias) h['alias'] = alias;
     if (json) h['Content-Type'] = 'application/json';
     return h;
+  }
+
+  /** Append ?demo= query param based on the live demo mode flag. */
+  private demoParam(): string {
+    return this.demoMode.isDemo() ? 'demo=1' : 'demo=0';
+  }
+
+  async getDemoQuota(): Promise<{ deviceId: string; demoLimit: number; demoIncidentsCreated: number; remaining: number }> {
+    try {
+      const res = await fetch(`${this.base}/devices/quota`, { headers: this.headers(false) });
+      if (!res.ok) return { deviceId: '', demoLimit: 5, demoIncidentsCreated: 0, remaining: 5 };
+      return await res.json();
+    } catch {
+      return { deviceId: '', demoLimit: 5, demoIncidentsCreated: 0, remaining: 5 };
+    }
   }
 
   async sendContact(payload: { subject: string; message: string; alias?: string; locale?: string }): Promise<boolean> {
@@ -91,6 +108,7 @@ export class ApiClientService {
     if (query.confirmedOnly) params.set('confirmedOnly', 'true');
     if (query.includeHidden) params.set('includeHidden', 'true');
     if (query.limit) params.set('limit', String(query.limit));
+    params.set('demo', this.demoMode.isDemo() ? '1' : '0');
 
     const headers: Record<string, string> = {};
     if (query.etag) headers['If-None-Match'] = query.etag;
@@ -142,7 +160,7 @@ export class ApiClientService {
 
   async listImages(incidentId: string): Promise<string[]> {
     if (!this.isValidUuid(incidentId)) return [];
-    const res = await fetch(`${this.base}/images?incidentId=${encodeURIComponent(incidentId)}`);
+    const res = await fetch(`${this.base}/images?incidentId=${encodeURIComponent(incidentId)}&${this.demoParam()}`);
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data.keys) ? data.keys : [];
@@ -157,7 +175,7 @@ export class ApiClientService {
   async listConfirmations(incidentId: string): Promise<Confirmer[]> {
     if (!this.isValidUuid(incidentId)) return [];
     try {
-      const res = await fetch(`${this.base}/confirmations?incidentId=${encodeURIComponent(incidentId)}`);
+      const res = await fetch(`${this.base}/confirmations?incidentId=${encodeURIComponent(incidentId)}&${this.demoParam()}`);
       if (!res.ok) return [];
       const data = await res.json();
       return Array.isArray(data.confirmations) ? data.confirmations : [];

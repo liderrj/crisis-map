@@ -32,13 +32,14 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     const confirmedOnly = qs.confirmedOnly === 'true';
     const includeHidden = qs.includeHidden === 'true';
 
-    const cacheKey = `${bbox}|${qs.type ?? ''}|${confirmedOnly}|${includeHidden}|${limit}`;
+    const cacheKey = `${bbox}|${qs.type ?? ''}|${confirmedOnly}|${includeHidden}|${limit}|demo=${qs.demo ?? '0'}`;
 
     let incidents = cacheGet<Incident[]>(cacheKey);
     if (!incidents) {
       incidents = await queryIncidents(
         prefixes, limit, now, bounds,
         typeFilter, confirmedOnly, includeHidden,
+        qs.demo === '1',
       );
       cacheSet(cacheKey, incidents);
     }
@@ -82,9 +83,16 @@ async function queryIncidents(
   typeFilter: string[] | undefined,
   confirmedOnly: boolean | undefined,
   includeHidden: boolean | undefined,
+  includeDemo: boolean,
 ): Promise<Incident[]> {
   const seen = new Set<string>();
   const incidents: Incident[] = [];
+
+  // Demo-mode filter: when NOT explicitly requesting demo mode, hide incidents
+  // flagged as demo. `attribute_not_exists` catches legacy rows without the field.
+  const demoFilterExpr = includeDemo
+    ? undefined
+    : 'attribute_not_exists(isDemo) OR isDemo = :false';
 
   const shardMap = groupPrefixesByShard(prefixes);
   const shardEntries = [...shardMap.entries()];
@@ -97,12 +105,35 @@ async function queryIncidents(
         const overallMin = rangeForPrefix(shardPrefixes[0]).min;
         const overallMax = rangeForPrefix(shardPrefixes[shardPrefixes.length - 1]).max;
 
-const r = await docClient.send(
+        // Compose the full FilterExpression from individual clauses
+        const filterParts: string[] = [];
+        if (!includeHidden) {
+          filterParts.push('#s <> :resolved');
+          filterParts.push('expiresAt > :now');
+        }
+        const demoClause = includeDemo ? undefined : demoFilterExpr;
+        if (demoClause) filterParts.push(demoClause);
+        const filterExpr = filterParts.length ? filterParts.join(' AND ') : undefined;
+
+        const exprValues: Record<string, unknown> = {
+          ':shard': shard,
+          ':min': overallMin,
+          ':max': overallMax,
+        };
+        if (!includeHidden) {
+          exprValues[':resolved'] = 'resolved';
+          exprValues[':now'] = now;
+        }
+        if (demoClause) {
+          exprValues[':false'] = false;
+        }
+
+        const r = await docClient.send(
           new QueryCommand({
             TableName: TABLES.incidents,
             IndexName: 'geo-index-v2',
             KeyConditionExpression: 'gsiPkV2 = :shard AND geohash BETWEEN :min AND :max',
-            FilterExpression: includeHidden ? undefined : '#s <> :resolved AND expiresAt > :now',
+            ...(filterExpr ? { FilterExpression: filterExpr } : {}),
             ExpressionAttributeNames: {
               '#s': 'status',
               '#t': 'type',
@@ -110,14 +141,10 @@ const r = await docClient.send(
               '#sv': 'severity',
               '#l': 'location',
               '#d': 'description',
+              ...(demoClause ? { '#isDemo': 'isDemo' } : {}),
             },
-            ExpressionAttributeValues: {
-              ':shard': shard,
-              ':min': overallMin,
-              ':max': overallMax,
-              ...(includeHidden ? {} : { ':resolved': 'resolved', ':now': now }),
-            },
-            ProjectionExpression: 'incidentId,#s,#t,#c,#sv,#l,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,#d',
+            ...(Object.keys(exprValues).length ? { ExpressionAttributeValues: exprValues } : {}),
+            ProjectionExpression: 'incidentId,#s,#t,#c,#sv,#l,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,#d,isDemo',
           }),
         );
         return (r.Items ?? []) as Incident[];
@@ -138,6 +165,9 @@ const r = await docClient.send(
           item.location.lng < bounds.minLng ||
           item.location.lng > bounds.maxLng
         ) continue;
+        // Defense-in-depth: filter explicitly at the SDK layer as well,
+        // in case DDB FilterExpression semantics ever change.
+        if (!includeDemo && item.isDemo === true) continue;
 
         incidents.push(item);
         if (incidents.length >= limit) return incidents;

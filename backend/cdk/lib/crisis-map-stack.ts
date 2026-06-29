@@ -82,6 +82,7 @@ export class CrisisMapStack extends cdk.Stack {
 
     const healthFn = mkLambda('Health', 'lambdas/health/handler.handler');
     const getIncidentsFn = mkLambda('GetIncidents', 'lambdas/incidents/get-incidents.handler', 60);
+    const devicesFn = mkLambda('Devices', 'lambdas/devices/handler.handler');
     const createIncidentFn = mkLambda('CreateIncident', 'lambdas/incidents/create-incident.handler');
     const confirmationsFn = mkLambda('Confirmations', 'lambdas/confirmations/handler.handler');
     const resourcesFn = mkLambda('Resources', 'lambdas/resources/handler.handler');
@@ -137,6 +138,7 @@ export class CrisisMapStack extends cdk.Stack {
     route('GET', '/confirmations', confirmationsFn);
     route('POST', '/images', imagesFn);
     route('GET', '/images', imagesFn);
+    route('GET', '/devices/quota', devicesFn);
     route('GET', '/resources', resourcesFn);
     route('GET', '/legend', legendFn);
     route('POST', '/sync', syncFn);

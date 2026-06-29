@@ -306,6 +306,9 @@ export class IncidentDetailComponent {
     const id = this.incident()?.incidentId;
     if (!id || this.isPending()) return;
 
+    // Confirmations inherit the demo flag from the parent incident.
+    const isDemo = this.incident()?.isDemo === true;
+
     // Optimistic feedback first so the user always sees something happen.
     this.msg.set(this.actionMessage(action));
     if (this.msgTimer) clearTimeout(this.msgTimer);
@@ -315,7 +318,7 @@ export class IncidentDetailComponent {
       await this.storage.addOutbox({
         id: crypto.randomUUID(),
         op: 'confirm',
-        payload: { incidentId: id, action },
+        payload: { incidentId: id, action, isDemo: isDemo ? true : undefined },
         createdAt: Date.now(),
       });
 

@@ -5,6 +5,7 @@ import { ImageUploadService } from './image-upload.service';
 import { StorageService } from '../core/storage.service';
 import { SyncEngineService } from '../core/sync-engine.service';
 import { I18nService } from '../core/i18n.service';
+import { DemoModeService } from '../core/demo-mode.service';
 import { INCIDENT_TYPES, SEVERITIES, categoryForType } from '../shared/constants';
 import type { Severity, IncidentType, Incident, IncidentCategory } from '../shared/constants';
 import { MAX_DESCRIPTION_LENGTH, MAX_IMAGE_COUNT } from '../shared/constants';
@@ -133,6 +134,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   private images = inject(ImageUploadService);
   private storage = inject(StorageService);
   private sync = inject(SyncEngineService);
+  private demoMode = inject(DemoModeService);
   protected readonly i18n = inject(I18nService);
 
   readonly submitted = output<string>();
@@ -233,6 +235,15 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   async submit(): Promise<void> {
     this.submitting.set(true);
     this.error.set('');
+
+    // Demo-mode quota guard. The backend also enforces this, but a
+    // quick local rejection gives immediate UX feedback.
+    if (this.demoMode.isDemo() && this.demoMode.limitReached()) {
+      this.error.set(this.i18n.t('demo.error.limitReached', { limit: this.demoMode.DEMO_LIMIT }));
+      this.submitting.set(false);
+      return;
+    }
+
     const gps = this.location();
     const outboxId = crypto.randomUUID();
     let description = this.description.slice(0, MAX_DESCRIPTION_LENGTH) || undefined;
@@ -243,6 +254,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
     const imageCount = this.files().length;
     const nowSec = NOW_SEC();
     const category: IncidentCategory = categoryForType(this.type);
+    const isDemo = this.demoMode.isDemo();
 
     const payload = {
       outboxId,
@@ -257,9 +269,10 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
       expiresAt: nowSec + 60 * 60 * 24 * 7,
       creatorDeviceId: this.device.device().deviceId,
       creatorAlias: this.device.device().alias,
+      isDemo,
     };
 
-    const localIncident: Incident & { __pending?: boolean; __outboxId?: string } = {
+    const localIncident: Incident & { __pending?: boolean; __outboxId?: string; isDemo?: boolean } = {
       incidentId: outboxId,
       type: this.type,
       category,
@@ -279,6 +292,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
       imageCount,
       __pending: true,
       __outboxId: outboxId,
+      isDemo: isDemo ? true : undefined,
     };
 
     try {
@@ -300,6 +314,7 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
       });
 
       this.sync.scheduleSync();
+      if (isDemo) this.demoMode.recordDemoIncidentCreated();
       this.submitted.emit('pending');
     } catch (e) {
       console.error('Failed to save report locally', e);

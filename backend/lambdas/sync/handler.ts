@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { docClient, TABLES, putItem, updateItem } from '../../shared/db.js';
+import { docClient, TABLES, getItem, putItem, updateItem } from '../../shared/db.js';
 import { UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { createHash } from 'node:crypto';
 import { encodeGeohash, geohashNeighbours, haversineMeters } from '../../shared/geo.js';
@@ -9,10 +9,12 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_IMAGE_COUNT,
   DUPLICATE_RADIUS_METERS,
+  DEMO_INCIDENT_LIMIT,
   isValidIncidentId,
   type Incident,
   type IncidentCreateInput,
   type ConfirmationAction,
+  type Device,
 } from '../../shared/types.js';
 import { extractDeviceContext, jsonResponse, errorResponse, sanitize } from '../../shared/headers.js';
 import { QueryCommand } from '@aws-sdk/lib-dynamodb';
@@ -79,6 +81,17 @@ async function applyCreate(
     return { status: 'error', message: 'Invalid location' };
   }
   const imageCount = Math.max(0, Math.min(MAX_IMAGE_COUNT, input.imageCount ?? 0));
+  const isDemo = input.isDemo === true;
+
+  // Demo-mode quota check (per device, lifetime counter).
+  // Confirmations are free; only incident creation counts.
+  if (isDemo) {
+    const existing = await getItem<Device>(TABLES.devices, { deviceId: device.deviceId });
+    const used = existing?.demoIncidentsCreated ?? 0;
+    if (used >= DEMO_INCIDENT_LIMIT) {
+      return { status: 'demo_limit', message: `Demo incident limit reached (${used}/${DEMO_INCIDENT_LIMIT})` };
+    }
+  }
 
   const geohash = encodeGeohash(input.location.lat, input.location.lng);
   const duplicate = await findDuplicate(input.type, geohash, input.location.lat, input.location.lng);
@@ -121,6 +134,7 @@ async function applyCreate(
     negativeVotes: 0,
     imageCount,
     gsiPkV2: geohash[0],
+    isDemo: isDemo ? true : undefined,
   };
 
   // Conditional put: if a parallel write already created this exact
@@ -135,11 +149,33 @@ async function applyCreate(
   if (!created) {
     return { status: 'duplicate', duplicateOf: incidentId };
   }
+
+  // Best-effort device + counter bookkeeping. Failures here should not
+  // roll back the incident creation — we log and move on.
+  try {
+    if (isDemo) {
+      await docClient.send(
+        new UpdateCommand({
+          TableName: TABLES.devices,
+          Key: { deviceId: device.deviceId },
+          UpdateExpression: 'SET alias = :alias, lastSeen = :now ADD demoIncidentsCreated :one',
+          ExpressionAttributeValues: {
+            ':alias': device.alias ?? '',
+            ':now': now,
+            ':one': 1,
+          },
+        }),
+      );
+    }
+  } catch (err) {
+    console.warn('Device counter upsert failed (demo create):', err);
+  }
+
   return { status: 'created', incidentId };
 }
 
 async function applyConfirm(
-  payload: { incidentId: string; action: string },
+  payload: { incidentId: string; action: string; isDemo?: boolean },
   device: { deviceId: string; alias?: string },
 ): Promise<Record<string, unknown>> {
   if (!payload?.incidentId || !isValidIncidentId(payload.incidentId)) {
@@ -153,7 +189,7 @@ async function applyConfirm(
   const now = Math.floor(Date.now() / 1000);
   const created = await putItem(
     TABLES.confirmations,
-    { incidentId: payload.incidentId, deviceId: device.deviceId, action, createdAt: now },
+    { incidentId: payload.incidentId, deviceId: device.deviceId, action, createdAt: now, isDemo: payload.isDemo === true ? true : undefined },
     'attribute_not_exists(incidentId)',
   );
   if (!created) return { status: 'conflict', message: 'already verified by this device' };

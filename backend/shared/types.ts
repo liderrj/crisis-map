@@ -62,6 +62,12 @@ export interface Incident {
   imageCount: number;
   /** Partition key for the geo-index-v2 GSI (first char of geohash, ~32 shards). */
   gsiPkV2?: string;
+  /**
+   * Demo-mode flag. When true, the report is hidden from non-demo users
+   * and consumes one slot of the per-device demo quota (Devices.demoIncidentsCreated).
+   * Absent / false ⇒ "real" incident visible to everyone.
+   */
+  isDemo?: boolean;
 }
 
 export interface Confirmation {
@@ -69,6 +75,8 @@ export interface Confirmation {
   deviceId: string;
   action: ConfirmationAction;
   createdAt: number;
+  /** Mirror of the parent incident's isDemo flag. */
+  isDemo?: boolean;
 }
 
 export interface Device {
@@ -76,6 +84,8 @@ export interface Device {
   alias?: string;
   createdAt: number;
   lastSeen?: number;
+  /** Lifetime count of demo-mode incidents this device has created. Never decremented. */
+  demoIncidentsCreated?: number;
 }
 
 export interface IncidentCreateInput {
@@ -84,6 +94,7 @@ export interface IncidentCreateInput {
   location: Location;
   description?: string;
   imageCount: number;
+  isDemo?: boolean;
 }
 
 export interface ConfidenceResult {
@@ -110,6 +121,7 @@ export const MAX_ALIAS_LENGTH = 30;
 export const MAX_DEVICE_ID_LENGTH = 64;
 export const MAX_INCIDENT_ID_LENGTH = 64;
 export const DUPLICATE_RADIUS_METERS = 30;
+export const DEMO_INCIDENT_LIMIT = 5;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

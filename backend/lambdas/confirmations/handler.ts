@@ -26,6 +26,16 @@ async function handleList(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
   if (!incidentId || !isValidIncidentId(incidentId)) {
     return errorResponse(400, 'Valid incidentId query parameter is required');
   }
+  const qs = event.queryStringParameters ?? {};
+  const includeDemo = qs.demo === '1';
+
+  // Hide confirmations of demo incidents from non-demo sessions.
+  if (!includeDemo) {
+    const incident = await getItem<Incident>(TABLES.incidents, { incidentId });
+    if (incident?.isDemo === true) {
+      return jsonResponse(200, { incidentId, confirmations: [] });
+    }
+  }
 
   const query = await docClient.send(
     new QueryCommand({
@@ -38,16 +48,24 @@ async function handleList(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
     deviceId: string;
     action: ConfirmationAction;
     createdAt: number;
+    isDemo?: boolean;
   }>;
 
   if (rows.length === 0) {
     return jsonResponse(200, { incidentId, confirmations: [] });
   }
 
+  // Even with the incident-level gate above, defensively drop any
+  // demo-tagged confirmations in non-demo sessions.
+  const filtered = includeDemo ? rows : rows.filter((r) => r.isDemo !== true);
+  if (filtered.length === 0) {
+    return jsonResponse(200, { incidentId, confirmations: [] });
+  }
+
   // Batch-resolve aliases in one round-trip. Max 100 keys per request.
   const aliases = new Map<string, string>();
-  for (let i = 0; i < rows.length; i += 100) {
-    const batch = rows.slice(i, i + 100).map((r) => r.deviceId);
+  for (let i = 0; i < filtered.length; i += 100) {
+    const batch = filtered.slice(i, i + 100).map((r) => r.deviceId);
     const res = await docClient.send(
       new BatchGetCommand({
         RequestItems: {
@@ -63,7 +81,7 @@ async function handleList(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
     }
   }
 
-  const response: ConfirmationResponse[] = rows
+  const response: ConfirmationResponse[] = filtered
     .map((r) => ({
       deviceId: r.deviceId,
       alias: aliases.get(r.deviceId) ?? '',
@@ -84,7 +102,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     // POST: write path. The deviceId header (case-insensitive) is
     // required so the confirmation can be attributed to a real
     // device and we can later resolve an alias for the UI.
-    let body: { incidentId?: string; action?: string };
+    let body: { incidentId?: string; action?: string; isDemo?: boolean };
     try {
       body = JSON.parse(event.body ?? '{}');
     } catch {
@@ -105,10 +123,14 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     const incident = await getItem<Incident>(TABLES.incidents, { incidentId: body.incidentId });
     if (!incident) return errorResponse(404, 'Incident not found');
 
+    // Confirmations are free even in demo mode, but we still tag them
+    // with isDemo so listing/audit stays coherent.
+    const isDemo = incident.isDemo === true || body.isDemo === true;
+
     const now = Math.floor(Date.now() / 1000);
     const created = await putItem(
       TABLES.confirmations,
-      { incidentId: body.incidentId, deviceId: device.deviceId, action, createdAt: now },
+      { incidentId: body.incidentId, deviceId: device.deviceId, action, createdAt: now, isDemo: isDemo ? true : undefined },
       'attribute_not_exists(incidentId)',
     );
 

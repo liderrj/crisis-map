@@ -27,8 +27,11 @@ export interface Incident {
   creatorDeviceId: string;
   confirmations: number;
   negativeVotes: number;
-  confidence: number;
   imageCount: number;
+  /** cached by the frontend; the backend computes confidence as `confirmations - negativeVotes` */
+  confidence?: number;
+  /** Demo-mode flag. Hidden from non-demo users by the backend. */
+  isDemo?: boolean;
 }
 
 export const INCIDENT_TYPES: { type: IncidentType; label: string }[] = [

@@ -19,6 +19,8 @@ import { TilePrefetchService } from './core/tile-prefetch.service';
 import { I18nService } from './core/i18n.service';
 import { DeviceIdService } from './core/device-id.service';
 import { VersionCheckService } from './core/version-check.service';
+import { DemoModeService } from './core/demo-mode.service';
+import { DemoBannerComponent } from './banner/demo-banner.component';
 import type { FilterState } from './map/incident-layer.service';
 import type { Incident, IncidentCategory, IncidentType } from './shared/constants';
 
@@ -37,12 +39,14 @@ import type { Incident, IncidentCategory, IncidentType } from './shared/constant
     IncidentListComponent,
     BannerTrayComponent,
     PrefetchBannerComponent,
+    DemoBannerComponent,
     ResourcesComponent,
     TermsComponent,
     ContactComponent,
   ],
   template: `
 <app-banner-tray />
+<app-demo-banner />
     <app-map #map (incidentSelected)="onIncidentSelected($event)" />
     <app-map-controls
       (report)="onReport()"
@@ -151,6 +155,7 @@ export class App {
   private prefetch = inject(TilePrefetchService);
   private device = inject(DeviceIdService);
   private version = inject(VersionCheckService);
+  private demoMode = inject(DemoModeService);
   readonly i18n = inject(I18nService);
 
   readonly filtersState = signal<FilterState>({ categories: new Set<IncidentCategory>(), confirmedOnly: false, types: new Set<IncidentType>() });
@@ -169,6 +174,9 @@ export class App {
   aliasValue = '';
 
   constructor() {
+    // Demo mode must be initialized before any other service that
+    // branches on isDemo (API client, sync engine, etc.).
+    this.demoMode.init();
     this.sync.start();
     void this.seed.seedIfNeeded();
     if (!this.device.device().alias) {

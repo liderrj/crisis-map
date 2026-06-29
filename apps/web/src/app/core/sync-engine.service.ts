@@ -108,6 +108,11 @@ export class SyncEngineService {
       if (status === 'created' || status === 'applied' || status === 'duplicate' || status === 'conflict') {
         await this.storage.removeOutbox(entry.id);
         await this.onSyncSuccess(entry, result);
+      } else if (status === 'demo_limit') {
+        // Backend refused: this device's demo quota is exhausted.
+        // Remove the op from the outbox so we don't retry forever;
+        // the user will see the error toast from the report form.
+        await this.storage.removeOutbox(entry.id);
       }
     }
 

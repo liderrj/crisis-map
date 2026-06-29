@@ -17,7 +17,7 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const device = extractDeviceContext(event.headers as Record<string, string | undefined>);
   if (!device) return errorResponse(400, 'deviceId header is required');
 
-  let body: { incidentId?: string; count?: number };
+  let body: { incidentId?: string; count?: number; isDemo?: boolean };
   try {
     body = JSON.parse(event.body ?? '{}');
   } catch {
@@ -35,6 +35,12 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const incident = await getItem<Incident>(TABLES.incidents, { incidentId: body.incidentId });
   if (!incident) return errorResponse(404, 'Incident not found');
 
+  // Demo images live under demo/{incidentId}/ so they never collide with
+  // real image paths even if the same UUID ended up re-used.
+  const isDemo = incident.isDemo === true || body.isDemo === true;
+  const keyRoot = isDemo ? `demo/${body.incidentId}` : body.incidentId;
+  const keyPrefix = `${keyRoot}/`;
+
   // Count actual objects already in S3 for this incident, not the
   // incident.imageCount field. The field tracks the user's intent
   // (set on creation); the actual upload count is the source of
@@ -43,7 +49,7 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   // count was already counted at creation.
   const existing = await s3.send(new ListObjectsV2Command({
     Bucket: bucket,
-    Prefix: `${body.incidentId}/`,
+    Prefix: keyPrefix,
     MaxKeys: 1000,
   }));
   const existingCount = (existing.Contents ?? []).filter(
@@ -56,7 +62,7 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
   const timestamp = Date.now();
   const uploads = [];
   for (let i = 0; i < count; i++) {
-    const key = `${body.incidentId}/${timestamp}-${i}.webp`;
+    const key = `${keyPrefix}${timestamp}-${i}.webp`;
     if (key.length > MAX_KEY_LENGTH) {
       return errorResponse(400, 'Image key too long');
     }
@@ -72,23 +78,46 @@ async function handleUpload(event: APIGatewayProxyEventV2): Promise<APIGatewayPr
 }
 
 async function handleList(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
-  const incidentId = event.queryStringParameters?.incidentId;
+  const qs = event.queryStringParameters ?? {};
+  const incidentId = qs.incidentId;
   if (!incidentId || !isValidIncidentId(incidentId)) {
     return errorResponse(400, 'Valid incidentId query parameter is required');
   }
+  const includeDemo = qs.demo === '1';
 
-  const prefix = `${incidentId}/`;
-  const listed = await s3.send(new ListObjectsV2Command({
-    Bucket: bucket,
-    Prefix: prefix,
-    MaxKeys: MAX_IMAGE_COUNT,
-  }));
+  // If the caller is a non-demo session asking for a demo incident's
+  // images, return empty. We resolve the incident to find out its flag.
+  if (!includeDemo) {
+    const incident = await getItem<Incident>(TABLES.incidents, { incidentId });
+    if (incident?.isDemo === true) {
+      return jsonResponse(200, { incidentId, keys: [] });
+    }
+  }
 
-  const keys = (listed.Contents ?? [])
-    .map((o) => o.Key)
-    .filter((k): k is string => typeof k === 'string' && k.startsWith(prefix) && k.endsWith('.webp'))
-    .sort();
+  const prefixes: string[] = [];
+  if (includeDemo) prefixes.push(`demo/${incidentId}/`);
+  prefixes.push(`${incidentId}/`);
 
+  const seen = new Set<string>();
+  for (const prefix of prefixes) {
+    let token: string | undefined;
+    do {
+      const listed = await s3.send(new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        MaxKeys: MAX_IMAGE_COUNT,
+        ContinuationToken: token,
+      }));
+      for (const o of listed.Contents ?? []) {
+        if (typeof o.Key === 'string' && o.Key.endsWith('.webp')) {
+          seen.add(o.Key);
+        }
+      }
+      token = listed.NextContinuationToken;
+    } while (token);
+  }
+
+  const keys = [...seen].sort();
   return jsonResponse(200, { incidentId, keys });
 }
 

@@ -1,5 +1,6 @@
 import { Component, output, inject, signal } from '@angular/core';
 import { I18nService } from '../core/i18n.service';
+import { DemoModeService } from '../core/demo-mode.service';
 import { BUILD_VERSION } from '../core/build-info';
 
 @Component({
@@ -17,7 +18,12 @@ import { BUILD_VERSION } from '../core/build-info';
         <span class="cm-fab-label">{{ i18n.t('fab.disasterZone') }}</span>
       </button>
 
-      <button class="cm-fab cm-fab-report" (click)="report.emit()" [attr.aria-label]="i18n.t('fab.report')">
+      <button class="cm-fab cm-fab-report"
+        (click)="onReportClick()"
+        [class.cm-fab-disabled]="reportDisabled()"
+        [disabled]="reportDisabled()"
+        [attr.aria-label]="i18n.t('fab.report')"
+        [attr.title]="reportDisabled() ? i18n.t('demo.fab.tooltip', { limit: demoMode.DEMO_LIMIT }) : null">
         <span class="cm-fab-icon">＋</span>
         <span class="cm-fab-label">{{ i18n.t('fab.report') }}</span>
       </button>
@@ -116,6 +122,9 @@ import { BUILD_VERSION } from '../core/build-info';
     .cm-fab-label { font-size: 15px; }
     .cm-fab-report { background: #d32f2f; color: #fff; }
     .cm-fab-report .cm-fab-icon { font-size: 28px; }
+    .cm-fab-report.cm-fab-disabled,
+    .cm-fab-report[disabled] { opacity: 0.5; cursor: not-allowed; }
+    .cm-fab-report.cm-fab-disabled:hover:not([disabled]) { background: #d32f2f; }
     .cm-fab-locate { background: #1976d2; color: #fff; }
     .cm-fab-disaster { background: #e65100; color: #fff; animation: cm-disaster-pulse 1.6s ease-out infinite; }
     .cm-fab-menu { background: #424242; color: #fff; }
@@ -191,8 +200,20 @@ import { BUILD_VERSION } from '../core/build-info';
 })
 export class MapControlsComponent {
   readonly i18n = inject(I18nService);
+  readonly demoMode = inject(DemoModeService);
   readonly buildVersion = (BUILD_VERSION as string) === 'dev' ? 'dev' : BUILD_VERSION.slice(0, 7);
   readonly menuOpen = signal(false);
+
+  /** The Report FAB is locked when demo mode's lifetime quota is hit. */
+  reportDisabled(): boolean {
+    return this.demoMode.isDemo() && this.demoMode.limitReached();
+  }
+
+  /** Honor the disabled attribute: belt-and-suspenders against the form opening. */
+  onReportClick(): void {
+    if (this.reportDisabled()) return;
+    this.report.emit();
+  }
 
   readonly report = output<void>();
   readonly locate = output<void>();
