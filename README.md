@@ -187,3 +187,111 @@ El directorio `apps/web/dist/web` es un bundle estático listo para cualquier ho
 ## License
 
 MIT — ver [LICENSE](./LICENSE).
+
+---
+
+## Partner API (v1)
+
+CrisisMap expone una API REST versionada para integraciones externas
+(bomberos, ONGs, medios, otras plataformas de respuesta). Permite leer
+y escribir incidentes usando OAuth2 client credentials. La PWA de
+ciudadanos sigue usando sus endpoints sin auth en `/incidents`,
+`/confirmations` y `/sync` (sin cambios).
+
+- **Base URL**: `https://y8mtov2nda.execute-api.us-east-1.amazonaws.com`
+- **Spec OpenAPI 3.1**: `GET /v1/openapi.json`
+- **Swagger UI**: `GET /v1/docs` (CDN-hosted, sin auth)
+- **Scopes disponibles**:
+  - `incidents:read` — listar / obtener incidentes
+  - `incidents:write` — crear / editar incidentes propios
+  - `confirmations:read` — listar confirmaciones de un incidente
+  - `confirmations:write` — votar sobre un incidente
+
+### Endpoints
+
+| Método | Path | Scope | Descripción |
+|--------|------|-------|-------------|
+| `POST` | `/v1/oauth/token` | (ninguno) | Intercambia `client_id` + `client_secret` por un JWT Bearer de 1h |
+| `GET`  | `/v1/incidents` | `incidents:read` | Lista por `bbox` o `source=partner:<id>`, con filtros de tipo / severidad / fecha / radio |
+| `GET`  | `/v1/incidents/{id}` | `incidents:read` | Detalle + confirmations embebidas |
+| `POST` | `/v1/incidents` | `incidents:write` | Crear incidente (idempotente vía `externalId`); imágenes externas se descargan y rehostean en S3 |
+| `PATCH`| `/v1/incidents/{id}` | `incidents:write` | Actualizar `severity`, `status`, `description`, `metadata` (solo del propio partner) |
+| `GET`  | `/v1/incidents/{id}/confirmations` | `confirmations:read` | Listar voters |
+| `POST` | `/v1/incidents/{id}/confirmations` | `confirmations:write` | Votar (`confirm` / `improved` / `worsened` / `no_longer_exists`) con `voterId` propio |
+
+### Flujo OAuth2 (curl)
+
+```bash
+# 1. Pedir un token (form-encoded)
+curl -X POST https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "scope=incidents:read incidents:write"
+
+# 2. Usar el token en un endpoint protegido
+TOKEN="eyJhbGciOi..."
+curl https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents?bbox=-67.20,10.20,-66.40,10.80 \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Crear un incidente (idempotente vía externalId)
+curl -X POST https://y8mtov2nda.execute-api.us-east-1.amazonaws.com/v1/incidents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "externalId": "ticket-12345",
+    "type": "fire",
+    "severity": "high",
+    "location": { "lat": 10.50, "lng": -66.91 },
+    "description": "Incendio reportado por bombero en turno",
+    "imageUrls": ["https://partner.cdn/foto1.jpg"],
+    "metadata": { "reporterName": "Cabo Pérez", "unit": "B-12" }
+  }'
+```
+
+### Códigos de error comunes
+
+- `400 bad_request` — payload inválido (filtro mal formado, tipo desconocido, etc.)
+- `401 unauthorized` — token ausente, expirado, o con firma inválida
+- `403 insufficient_scope` — el token no incluye el scope necesario
+- `403 forbidden` — el partner intenta editar un incidente que no creó
+- `404 not_found` — incidente inexistente
+- `409 already_verified` — el voterId ya votó sobre este incidente
+
+### Provisionar un cliente
+
+```bash
+$env:AWS_PROFILE="arkem"
+$env:OAUTH_CLIENTS_TABLE="CrisisMapStack-OAuthClientsTableOAuthClients"
+
+# Crear
+node backend/scripts/provision-oauth-client.mjs create \
+  --name "Bomberos Caracas" \
+  --partner-id bomberos-caracas \
+  --scopes "incidents:read incidents:write confirmations:read"
+
+# Rotar el secret (imprime el nuevo secret una sola vez)
+node backend/scripts/provision-oauth-client.mjs rotate-secret --client-id bomberos-caracas-XXXXXX
+
+# Desactivar (conserva el audit trail pero rechaza los tokens)
+node backend/scripts/provision-oauth-client.mjs disable --client-id bomberos-caracas-XXXXXX
+```
+
+El `client_secret` se imprime **una sola vez** en stdout. No se puede
+recuperar de DynamoDB (se guarda hasheado con SHA-256). Si se pierde,
+rota con `rotate-secret`.
+
+### Seguridad y límites
+
+- HTTPS obligatorio (forzado por API Gateway).
+- JWT firmado con HS256 y secreto de 256+ bits cargado en deploy.
+- Tokens expiran en 1h; no hay refresh — el cliente pide uno nuevo cuando lo necesita.
+- Descarga de imágenes externas con protección SSRF (bloquea 127.0.0.0/8,
+  10/8, 172.16/12, 192.168/16, 169.254/16, IPv6 ULA / link-local / loopback).
+- Sin PII en respuestas a partners: nunca se devuelve `creatorDeviceId`
+  (solo `creatorAlias`, que ya es público en el mapa).
+- Audit log de todas las acciones de escritura en la tabla
+  `ExternalActions` (TTL 90 días).
+- Rate limit por partner: 60 req/min por defecto, configurable al crear
+  el cliente.
