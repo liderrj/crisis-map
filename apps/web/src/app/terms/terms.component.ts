@@ -225,11 +225,53 @@ const REPO_URL = 'https://github.com/liderrj/crisis-map/commit/';
             </section>
 
             <section>
-              <h3>Código abierto</h3>
-              <p>El software de CrisisMap puede ser publicado bajo una licencia de
-                código abierto. Los contribuidores aportan su trabajo voluntariamente
-                y sin garantías. Los contribuidores pueden unirse o abandonar el
-                proyecto en cualquier momento.</p>
+              <h3>Código abierto y contribuciones</h3>
+              <p>
+                CrisisMap es un proyecto de código abierto. El código fuente está
+                disponible públicamente en
+                <a class="cm-extlink" href="https://github.com/liderrj/crisis-map"
+                  target="_blank" rel="noopener noreferrer">github.com/liderrj/crisis-map</a>
+                y puede ser consultado, revisado, bifurcado y mejorado por cualquier persona.
+              </p>
+              <p>
+                Se aceptan y valoran pull requests con contribuciones útiles:
+                corrección de errores, mejoras de rendimiento, traducciones,
+                documentación, accesibilidad y cualquier cambio que aporte valor real
+                para las personas afectadas por emergencias.
+              </p>
+              <p>
+                <strong>No se garantiza que toda contribución sea aceptada ni integrada.</strong>
+                El proyecto fue desarrollado en un tiempo muy corto y bajo presión
+                por personas con empleos, familias y otras responsabilidades. Las
+                revisiones, pruebas y merges se realizan en el tiempo disponible de
+                los mantenedores, que es limitado y voluntario. Una pull request
+                puede permanecer abierta, requerir cambios o ser cerrada si no se
+                alinea con los objetivos del proyecto. Esto no es un reflejo del
+                valor de quien aporta, sino de la capacidad operativa del equipo.
+              </p>
+              <p>
+                Toda colaboración que se integre será publicada bajo la misma
+                licencia del proyecto cuando sea posible. Se agradece profundamente
+                cualquier intento de mejora o de colaboración.
+              </p>
+            </section>
+
+            <section>
+              <h3>Financiamiento</h3>
+              <p>
+                CrisisMap no cobra dinero a los usuarios ni vende datos personales.
+                Hasta la fecha, los costos de infraestructura han sido cubiertos
+                voluntariamente por los propios mantenedores y no ha sido necesario
+                solicitar fondos externos.
+              </p>
+              <p>
+                Si en el futuro los costos operativos (alojamiento, nombres de
+                dominio, mapas, servicios auxiliares) crecieran hasta requerir
+                recursos adicionales, esto se gestionará de forma transparente y
+                pública. Cualquier decisión sobre financiamiento será comunicada
+                con claridad a la comunidad antes de aplicarse, sin comprometer el
+                carácter gratuito de la plataforma para los usuarios.
+              </p>
             </section>
 
             <section>
@@ -332,6 +374,10 @@ const REPO_URL = 'https://github.com/liderrj/crisis-map/commit/';
       color: #1976d2; text-decoration: none; font-weight: 600;
     }
     .cm-version-hash:hover { text-decoration: underline; }
+    .cm-extlink {
+      color: #1976d2; text-decoration: underline; word-break: break-all;
+    }
+    .cm-extlink:hover { color: #1565c0; }
     footer {
       padding: 16px 24px; border-top: 1px solid #ddd; background: #fafafa;
       position: sticky; bottom: 0;
