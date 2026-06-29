@@ -47,21 +47,25 @@ function ipToBuffer(ip: string): Buffer | null {
     return Buffer.from(parts);
   }
   if (family === 6) {
-    // WHATWG URL normalizes IPv6 for us.
-    let hostname: string;
-    try {
-      hostname = new URL(`http://[${ip}]/`).hostname;
-    } catch {
-      return null;
+    // Accept either a bare address ("fe80::1", "::", "fe80::", "1::2")
+    // or the bracketed form ("[fe80::1]") that the URL parser leaves
+    // in `hostname`.
+    let bare = ip;
+    if (bare.startsWith('[') && bare.endsWith(']')) {
+      bare = bare.slice(1, -1);
     }
-    // Strip the brackets WHATWG keeps in hostname for IPv6.
-    const bare = hostname.replace(/^\[|\]$/g, '');
+    // Normalize leading/trailing "::" so the split always produces a
+    // single empty between the two halves, not two empties at the edges.
+    // e.g. "fe80::" -> "fe80::0" -> ["fe80", "", "0"]; "::1" -> "0::1"
+    // -> ["0", "", "1"]; "::" -> "0::0" -> ["0", "", "0"].
+    if (bare === '::') bare = '0::0';
+    if (bare.startsWith('::')) bare = '0' + bare;
+    if (bare.endsWith('::')) bare = bare + '0';
     const parts = bare.split(':');
     const out: number[] = [];
     let sawEmpty = false;
     for (const part of parts) {
       if (part === '') {
-        // "::" zero-run
         if (sawEmpty) return null; // "::" can appear at most once
         sawEmpty = true;
         const known = parts.filter((p) => p !== '').length;
@@ -149,15 +153,20 @@ export async function safeFetch(url: string, opts: SafeFetchOptions = {}): Promi
   const host = parsed.hostname;
   if (!host) throw new SafeFetchError('invalid_url', 'URL has no hostname');
 
+  // WHATWG URL keeps the IPv6 brackets in `hostname` (e.g. "[fe80::1]").
+  // Strip them before calling isIP / lookup so the rest of the function
+  // operates on a bare address.
+  const bareHost = host.replace(/^\[|\]$/g, '');
+
   // If the host is already an IP literal, check it directly. Otherwise
   // resolve and check every returned address.
   const addresses: string[] = [];
-  if (isIP(host)) {
-    addresses.push(host);
+  if (isIP(bareHost)) {
+    addresses.push(bareHost);
   } else {
     let resolved: Array<{ address: string; family: number }>;
     try {
-      resolved = await lookup(host, { all: true });
+      resolved = await lookup(bareHost, { all: true });
     } catch (e) {
       throw new SafeFetchError('dns_failed', `DNS lookup failed: ${(e as Error).message}`);
     }

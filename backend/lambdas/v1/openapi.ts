@@ -17,20 +17,19 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
         body: html,
       };
     }
-    // Default to openapi.json.
+    // Default to openapi.json. The file is YAML but the endpoint name
+    // stays as /v1/openapi.json for stable client integrations. We
+    // advertise it as application/yaml so the Strict-Transport-Security
+    // sniff policy and the partner's HTTP client get the real format.
     const yaml = await readFile(openapiPath(), 'utf8');
     return {
       statusCode: 200,
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Type': 'application/yaml; charset=utf-8',
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'public, max-age=300',
       },
-      body: yaml, // The handler returns the YAML as-is; many tools accept
-                  // application/json with YAML content. The browser just
-                  // shows text. To strictly comply with OpenAPI, clients
-                  // should request /v1/openapi.yaml (future) or this
-                  // endpoint with Accept: text/yaml.
+      body: yaml,
     };
   } catch (e) {
     console.error('openapi handler error:', e);
