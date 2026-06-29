@@ -40,5 +40,20 @@ export class IncidentsTable extends Construct {
       partitionKey: { name: 'gsiPkV2', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'geohash', type: dynamodb.AttributeType.STRING },
     });
+
+    // Partner API: idempotency on partner-supplied externalId.
+    // PK = `${partnerId}#${externalId}` (composite, unique per partner).
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'external-id-index',
+      partitionKey: { name: 'externalKey', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
+    });
+
+    // Partner API: list incidents by source partner.
+    this.table.addGlobalSecondaryIndex({
+      indexName: 'partner-source-index',
+      partitionKey: { name: 'partnerId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.NUMBER },
+    });
   }
 }

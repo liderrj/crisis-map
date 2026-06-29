@@ -11,9 +11,20 @@ export class CrisisMapApi extends Construct {
     this.httpApi = new apigatewayv2.HttpApi(this, 'HttpApi', {
       createDefaultStage: false,
       corsPreflight: {
-        allowOrigins: ['https://erqk-crisis-map.netlify.app'],
-        allowMethods: [apigatewayv2.CorsHttpMethod.GET, apigatewayv2.CorsHttpMethod.POST, apigatewayv2.CorsHttpMethod.OPTIONS],
-        allowHeaders: ['Content-Type', 'deviceId', 'alias', 'X-Seed-Token'],
+        allowOrigins: ['https://erqk-crisis-map.netlify.app', '*'],
+        allowMethods: [
+          apigatewayv2.CorsHttpMethod.GET,
+          apigatewayv2.CorsHttpMethod.POST,
+          apigatewayv2.CorsHttpMethod.PATCH,
+          apigatewayv2.CorsHttpMethod.OPTIONS,
+        ],
+        allowHeaders: [
+          'Content-Type',
+          'deviceId',
+          'alias',
+          'X-Seed-Token',
+          'Authorization',
+        ],
       },
     });
 

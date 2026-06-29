@@ -7,6 +7,8 @@ import { Construct } from 'constructs';
 import { IncidentsTable } from './incidents-table';
 import { ConfirmationsTable } from './confirmations-table';
 import { DevicesTable } from './devices-table';
+import { OAuthClientsTable } from './oauth-clients-table';
+import { ExternalActionsTable } from './external-actions-table';
 import { ImageStorage } from './image-storage';
 import { TileStorage } from './tile-storage';
 import { CrisisMapApi } from './api';
@@ -29,9 +31,19 @@ export class CrisisMapStack extends cdk.Stack {
       throw new Error('CONTACT_APP_PASSWORD env var is required to deploy this stack');
     }
 
+    // Partner API JWT signing secret. Loaded from env (deploy-time) and
+    // exposed to Lambdas as JWT_SIGNING_SECRET. Rotating requires a
+    // redeploy; for MVP this is acceptable.
+    const jwtSecret = process.env.JWT_SIGNING_SECRET ?? '';
+    if (!jwtSecret || jwtSecret.length < 32) {
+      throw new Error('JWT_SIGNING_SECRET env var is required (>=32 chars) to deploy this stack');
+    }
+
     const incidents = new IncidentsTable(this, 'IncidentsTable');
     const confirmations = new ConfirmationsTable(this, 'ConfirmationsTable');
     const devices = new DevicesTable(this, 'DevicesTable');
+    const oauthClients = new OAuthClientsTable(this, 'OAuthClientsTable');
+    const externalActions = new ExternalActionsTable(this, 'ExternalActionsTable');
     const images = new ImageStorage(this, 'ImageStorage');
     const tiles = new TileStorage(this, 'TileStorage');
     const api = new CrisisMapApi(this, 'Api');
@@ -53,6 +65,28 @@ export class CrisisMapStack extends cdk.Stack {
       ],
     });
 
+    // Partner-API policy: extra tables (OAuthClients read, ExternalActions
+    // write, Incidents with the new GSIs). Distinct from the citizen
+    // sharedPolicy so we can rotate independently later.
+    const partnerPolicy = new iam.PolicyStatement({
+      actions: [
+        'dynamodb:PutItem',
+        'dynamodb:GetItem',
+        'dynamodb:UpdateItem',
+        'dynamodb:Query',
+        'dynamodb:Scan',
+        'dynamodb:BatchGetItem',
+      ],
+      resources: [
+        incidents.table.tableArn,
+        `${incidents.table.tableArn}/index/*`,
+        confirmations.table.tableArn,
+        devices.table.tableArn,
+        oauthClients.table.tableArn,
+        externalActions.table.tableArn,
+      ],
+    });
+
     const s3Policy = new iam.PolicyStatement({
       actions: ['s3:PutObject', 's3:GetObject'],
       resources: [`${images.bucket.bucketArn}/*`],
@@ -68,6 +102,14 @@ export class CrisisMapStack extends cdk.Stack {
       CONFIRMATIONS_TABLE: confirmations.table.tableName,
       DEVICES_TABLE: devices.table.tableName,
       IMAGE_BUCKET: images.bucket.bucketName,
+      IMAGE_CDN_URL: `https://${images.distribution.distributionDomainName}`,
+    };
+
+    const partnerEnv = {
+      ...baseEnv,
+      OAUTH_CLIENTS_TABLE: oauthClients.table.tableName,
+      EXTERNAL_ACTIONS_TABLE: externalActions.table.tableName,
+      JWT_SIGNING_SECRET: jwtSecret,
     };
 
     const mkLambda = (name: string, handler: string, timeoutSec = 15): lambda.Function => {
@@ -81,6 +123,20 @@ export class CrisisMapStack extends cdk.Stack {
         environment: baseEnv,
       });
       fn.addToRolePolicy(sharedPolicy);
+      return fn;
+    };
+
+    const mkPartnerLambda = (name: string, handler: string, timeoutSec = 15): lambda.Function => {
+      const fn = new lambda.Function(this, name, {
+        runtime: lambda.Runtime.NODEJS_20_X,
+        architecture: lambda.Architecture.ARM_64,
+        timeout: cdk.Duration.seconds(timeoutSec),
+        memorySize: 512,
+        handler,
+        code: lambda.Code.fromAsset('../dist'),
+        environment: partnerEnv,
+      });
+      fn.addToRolePolicy(partnerPolicy);
       return fn;
     };
 
@@ -127,14 +183,29 @@ export class CrisisMapStack extends cdk.Stack {
       environment: { ...baseEnv, CONTACT_EMAIL: contactEmail, CONTACT_APP_PASSWORD: contactAppPassword },
       description: 'v3',
     });
+
+    // Partner API v1 Lambdas.
+    const oauthFn = mkPartnerLambda('OAuth', 'lambdas/oauth/handler.handler');
+    const getIncidentsV1Fn = mkPartnerLambda('GetIncidentsV1', 'lambdas/v1/get-incidents.handler', 30);
+    const getIncidentV1Fn = mkPartnerLambda('GetIncidentV1', 'lambdas/v1/get-incident.handler');
+    const getConfirmationsV1Fn = mkPartnerLambda('GetConfirmationsV1', 'lambdas/v1/get-confirmations.handler');
+    const postIncidentV1Fn = mkPartnerLambda('PostIncidentV1', 'lambdas/v1/post-incident.handler', 30);
+    const patchIncidentV1Fn = mkPartnerLambda('PatchIncidentV1', 'lambdas/v1/patch-incident.handler');
+    const postConfirmationV1Fn = mkPartnerLambda('PostConfirmationV1', 'lambdas/v1/post-confirmation.handler');
+    const openapiFn = mkPartnerLambda('OpenapiV1', 'lambdas/v1/openapi.handler');
+
+    // Lambdas that rehost images need S3 write access.
+    postIncidentV1Fn.addToRolePolicy(s3Policy);
+
     const route = (method: string, path: string, fn: lambda.Function) => {
       new apigatewayv2.HttpRoute(this, `${method}${path}Route`, {
         httpApi: api.httpApi,
         integration: new apigateway2Integrations.HttpLambdaIntegration(`${method}${path}Integration`, fn),
-        routeKey: apigatewayv2.HttpRouteKey.with(path, method as apigatewayv2.HttpMethod),
+        routeKey: apigatewayv2.HttpRouteKey.with(path, apigateway2HttpMethod(method)),
       });
     };
 
+    // Citizen API (unchanged).
     route('GET', '/health', healthFn);
     route('GET', '/incidents', getIncidentsFn);
     route('POST', '/incidents', createIncidentFn);
@@ -149,10 +220,33 @@ export class CrisisMapStack extends cdk.Stack {
     route('POST', '/seed', seedFn);
     route('POST', '/contact', contactFn);
 
+    // Partner API v1.
+    route('POST', '/v1/oauth/token', oauthFn);
+    route('GET', '/v1/incidents', getIncidentsV1Fn);
+    route('GET', '/v1/incidents/{id}', getIncidentV1Fn);
+    route('GET', '/v1/incidents/{id}/confirmations', getConfirmationsV1Fn);
+    route('POST', '/v1/incidents', postIncidentV1Fn);
+    route('PATCH', '/v1/incidents/{id}', patchIncidentV1Fn);
+    route('POST', '/v1/incidents/{id}/confirmations', postConfirmationV1Fn);
+    route('GET', '/v1/openapi.json', openapiFn);
+    route('GET', '/v1/docs', openapiFn);
+
     new cdk.CfnOutput(this, 'ApiUrl', { value: api.url });
     new cdk.CfnOutput(this, 'ImageBucketName', { value: images.bucket.bucketName });
     new cdk.CfnOutput(this, 'ImageCdnUrl', { value: `https://${images.distribution.distributionDomainName}` });
     new cdk.CfnOutput(this, 'TileBucketName', { value: tiles.bucket.bucketName });
     new cdk.CfnOutput(this, 'TileCdnUrl', { value: `https://${tiles.distribution.distributionDomainName}` });
+  }
+}
+
+// Local helper to keep the call sites tidy and type-checked.
+function apigateway2HttpMethod(m: string): apigatewayv2.HttpMethod {
+  switch (m) {
+    case 'GET': return apigatewayv2.HttpMethod.GET;
+    case 'POST': return apigatewayv2.HttpMethod.POST;
+    case 'PUT': return apigatewayv2.HttpMethod.PUT;
+    case 'PATCH': return apigatewayv2.HttpMethod.PATCH;
+    case 'DELETE': return apigatewayv2.HttpMethod.DELETE;
+    default: throw new Error(`Unsupported method: ${m}`);
   }
 }
