@@ -199,7 +199,7 @@ ciudadanos sigue usando sus endpoints sin auth en `/incidents`,
 `/confirmations` y `/sync` (sin cambios).
 
 - **Base URL**: `https://y8mtov2nda.execute-api.us-east-1.amazonaws.com`
-- **Spec OpenAPI 3.1**: `GET /v1/openapi.json`
+- **Spec OpenAPI 3.1**: `GET /v1/openapi.json` (servido como `application/yaml`)
 - **Swagger UI**: `GET /v1/docs` (CDN-hosted, sin auth)
 - **Scopes disponibles**:
   - `incidents:read` — listar / obtener incidentes
