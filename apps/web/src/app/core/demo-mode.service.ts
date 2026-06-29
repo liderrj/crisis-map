@@ -1,5 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
-import { ApiClientService } from './api-client.service';
+import { DeviceIdService } from './device-id.service';
+import { environment } from '../../environments/environment';
 
 const SESSION_FLAG = 'crisismap_demo_active';
 
@@ -18,10 +19,15 @@ const SESSION_FLAG = 'crisismap_demo_active';
  * The counter is **per-device, lifetime** — it does NOT reset on
  * session end. Only the `purge-test-incidents.mjs` script or the
  * AWS console can reset it.
+ *
+ * Note: this service does NOT inject `ApiClientService` to avoid a
+ * circular DI graph (ApiClient ↔ DemoMode). It hits the backend
+ * directly via fetch + the deviceId from DeviceIdService, which has
+ * no forward dependencies on either.
  */
 @Injectable({ providedIn: 'root' })
 export class DemoModeService {
-  private readonly api = inject(ApiClientService);
+  private readonly device = inject(DeviceIdService, { optional: true });
 
   readonly DEMO_LIMIT = 5;
 
@@ -71,11 +77,23 @@ export class DemoModeService {
     try { sessionStorage.removeItem(SESSION_FLAG); } catch { /* ignore */ }
   }
 
-  /** Refresh the per-device demo counter from the backend. */
+  /**
+   * Fetch the per-device demo counter directly from the backend.
+   * We avoid injecting ApiClientService here to break the cyclic
+   * graph (ApiClient ↔ DemoMode).
+   */
   async refreshQuota(): Promise<void> {
+    if (typeof fetch === 'undefined') return;
     try {
-      const q = await this.api.getDemoQuota();
-      this.demoIncidentsCreated.set(q.demoIncidentsCreated);
+      const deviceId = this.device?.device()?.deviceId;
+      if (!deviceId) return;
+      const res = await fetch(`${environment.apiUrl}/devices/quota`, {
+        headers: { deviceId },
+        cache: 'no-store',
+      });
+      if (!res.ok) return;
+      const q = await res.json() as { demoIncidentsCreated: number };
+      this.demoIncidentsCreated.set(q.demoIncidentsCreated ?? 0);
     } catch {
       // best-effort; counter will sync next time the report form fires
     }
@@ -91,3 +109,4 @@ export class DemoModeService {
     this.demoIncidentsCreated.update((n) => n + 1);
   }
 }
+
