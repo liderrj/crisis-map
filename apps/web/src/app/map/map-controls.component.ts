@@ -85,6 +85,20 @@ import { BUILD_VERSION } from '../core/build-info';
               <span class="cm-menu-text">{{ i18n.t('fab.terms') }}</span>
             </button>
           </li>
+          <li class="cm-menu-demo-li">
+            <button (click)="toggleDemo()" [class.cm-menu-demo-active]="demoMode.isDemo()"
+              [class.cm-menu-demo-locked]="demoMode.limitReached()">
+              <span class="cm-menu-icon">{{ demoMode.isDemo() ? '✓' : '🧪' }}</span>
+              <span class="cm-menu-text">
+                {{ demoMode.isDemo() ? i18n.t('demo.menu.deactivate') : i18n.t('demo.menu.activate') }}
+                @if (demoMode.isDemo()) {
+                  <span class="cm-menu-demo-badge">
+                    {{ i18n.t('demo.menu.counter', { count: demoMode.demoIncidentsCreated(), limit: demoMode.DEMO_LIMIT }) }}
+                  </span>
+                }
+              </span>
+            </button>
+          </li>
         </ul>
 
         <div class="cm-menu-lang">
@@ -167,7 +181,21 @@ import { BUILD_VERSION } from '../core/build-info';
     }
     .cm-menu li button:hover, .cm-menu li button:focus { background: #f5f5f5; outline: none; }
     .cm-menu-icon { font-size: 22px; width: 28px; text-align: center; }
-    .cm-menu-text { flex: 1; }
+    .cm-menu-text { flex: 1; display: flex; align-items: center; gap: 8px; }
+    .cm-menu-demo-li button { background: #f5f5f5; }
+    .cm-menu-demo-li button:hover,
+    .cm-menu-demo-li button:focus { background: #e0e0e0; }
+    .cm-menu-demo-active { background: #fff3e0 !important; color: #5d4037; }
+    .cm-menu-demo-active:hover,
+    .cm-menu-demo-active:focus { background: #ffe0b2 !important; }
+    .cm-menu-demo-locked { opacity: 0.85; }
+    .cm-menu-demo-badge {
+      display: inline-block; padding: 2px 6px; border-radius: 10px;
+      background: rgba(0,0,0,0.08);
+      font-size: 11px; font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .cm-menu-demo-active .cm-menu-demo-badge { background: rgba(230, 81, 0, 0.18); color: #5d4037; }
     .cm-menu-lang {
       display: flex; align-items: center; justify-content: space-between;
       padding: 14px 18px; border-top: 1px solid #eee; background: #fafafa;
@@ -225,6 +253,7 @@ export class MapControlsComponent {
   readonly terms = output<void>();
   readonly contact = output<void>();
   readonly alias = output<void>();
+  readonly demo = output<void>();
   readonly toggleLang = output<void>();
   readonly toggleMenu = output<void>();
 
@@ -236,6 +265,27 @@ export class MapControlsComponent {
 
   menuLabel(): string {
     return this.i18n.t('fab.menu');
+  }
+
+  /**
+   * Toggle demo mode straight from the menu. We don't emit an event and
+   * defer the response to App — the DemoModeService itself owns the
+   * service lifecycle (sessionStorage + cache wipe + reload). The
+   * menu just hands control over to it.
+   */
+  async toggleDemo(): Promise<void> {
+    this.menuOpen.set(false);
+    if (this.demoMode.isDemo()) {
+      // Leaving demo also fires its own reload (see DemoBanner.exit()).
+      await this.demoMode.deactivate();
+      if (typeof window !== 'undefined') window.location.reload();
+    } else {
+      this.demoMode.activate({ cleanUrl: true });
+      // Refresh quota for live counter display.
+      void this.demoMode.refreshQuota();
+      // Reload so any cached /incidents responses get fresh flags.
+      if (typeof window !== 'undefined') window.location.reload();
+    }
   }
 
   emitAndClose(name: string): void {
