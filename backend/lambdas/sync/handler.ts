@@ -87,13 +87,22 @@ async function applyCreate(
   }
 
   const now = Math.floor(Date.now() / 1000);
-  // Deterministic ID from type + geohash(6) (~600m cell) so concurrent
-  // creates of the same report write to the same item — the second
-  // putItem is an idempotent no-op, preventing duplicates.
-  const incidentId = createHash('sha256')
+  // Deterministic UUID v4 derived from type + geohash(6) (~600m cell).
+  // Concurrent creates of the same report compute the same ID, so the
+  // conditional put below is idempotent and the second concurrent
+  // writer gets ConflictException → reported as "duplicate".
+  // The hashed value is formatted as a UUID v4 so it passes the
+  // isValidIncidentId regex used by every other handler/route.
+  const hash = createHash('sha256')
     .update(`${input.type}:${geohash.slice(0, 6)}`)
     .digest('hex')
-    .slice(0, 36);
+    .slice(0, 32);
+  const incidentId =
+    `${hash.slice(0, 8)}-` +
+    `${hash.slice(8, 12)}-` +
+    `4${hash.slice(13, 16)}-` +
+    `${((parseInt(hash[16], 16) & 0x3) | 0x8).toString(16)}${hash.slice(17, 20)}-` +
+    `${hash.slice(20, 32)}`;
   const incident: Incident = {
     incidentId,
     type: input.type,
@@ -114,7 +123,18 @@ async function applyCreate(
     gsiPkV2: geohash[0],
   };
 
-  await putItem(TABLES.incidents, incident as unknown as Record<string, unknown>);
+  // Conditional put: if a parallel write already created this exact
+  // incident, fail with ConflictException so we report 'duplicate'
+  // instead of silently overwriting with slightly different fields
+  // (severity, imageCount, description from the race-loser).
+  const created = await putItem(
+    TABLES.incidents,
+    incident as unknown as Record<string, unknown>,
+    'attribute_not_exists(incidentId)',
+  );
+  if (!created) {
+    return { status: 'duplicate', duplicateOf: incidentId };
+  }
   return { status: 'created', incidentId };
 }
 
