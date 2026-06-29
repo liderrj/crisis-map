@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"const p=require('path');const f=require('fs');const src=p.join(__dirname,'..','node_modules','nodemailer');const dst=p.join(__dirname,'dist','node_modules','nodemailer');f.cpSync(src,dst,{recursive:true,force:true})\"",
+    "build": "tsc -p tsconfig.json && node -e \"const p=require('path');const f=require('fs');const r=require('fs/promises');const root=__dirname;(async()=>{const src1=p.join(root,'..','node_modules','nodemailer');const dst1=p.join(root,'dist','node_modules','nodemailer');f.cpSync(src1,dst1,{recursive:true,force:true});const joseCandidates=[p.join(root,'node_modules','jose'),p.join(root,'..','node_modules','jose')];for(const c of joseCandidates){if(f.existsSync(c)){const dst2=p.join(root,'dist','node_modules','jose');f.cpSync(c,dst2,{recursive:true,force:true});break;}}const src3=p.join(root,'docs');const dst3=p.join(root,'dist','docs');await r.cp(src3,dst3,{recursive:true,force:true});})()\"",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -13,6 +13,7 @@
     "@aws-sdk/client-ses": "^3.1075.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "jose": "^4.15.9",
     "nodemailer": "^9.0.1"
   },
   "devDependencies": {
