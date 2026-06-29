@@ -19,21 +19,21 @@ export const handler = withPartnerAuth(
         return errorResponse(404, 'Incident not found', 'not_found');
       }
 
-      // Fetch confirmations in parallel.
+      // Fetch confirmations in parallel. We don't project the citizen
+      // alias here because the Confirmations table doesn't store it
+      // (it's resolved server-side via BatchGet on Devices in the
+      // citizen endpoint). For partner voters the deviceId is already
+      // namespaced as `partner:<partnerId>:<voterId>` so it's
+      // self-describing.
       const confRes = await docClient.send(new QueryCommand({
         TableName: TABLES.confirmations,
         KeyConditionExpression: 'incidentId = :id',
         ExpressionAttributeValues: { ':id': id },
         ExpressionAttributeNames: { '#a': 'action' },
-        ProjectionExpression: 'deviceId, #a, createdAt, alias',
+        ProjectionExpression: 'deviceId, #a, createdAt',
       }));
       const confirmations = (confRes.Items ?? []).map((c) => ({
         deviceId: c.deviceId as string,
-        // Confirmation table does not store alias directly; alias is
-        // surfaced via batch-resolve on the citizen endpoint, but for v1
-        // we just echo the deviceId-prefixed label to avoid a second
-        // round-trip. Partner can join with /devices/quota if needed.
-        alias: undefined as string | undefined,
         action: c.action as string,
         createdAt: c.createdAt as number,
       }));
