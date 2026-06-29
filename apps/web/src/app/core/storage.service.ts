@@ -62,6 +62,29 @@ export class StorageService {
     await tx.done;
   }
 
+  /**
+   * Remove every cached incident that was created in demo mode. Called
+   * when the user exits demo mode so the next page load does not
+   * surface demo data through stale caches. Idempotent.
+   *
+   * Note: cacheIncidents() above uses `put` (upsert by incidentId).
+   * After a real-mode re-fetch it overwrites matching rows but never
+   * removes rows it does not see — including the demo ones from a
+   * previous session — so this method is the only thing that evicts
+   * demo-tagged rows from the cache.
+   */
+  async clearDemoIncidents(): Promise<void> {
+    const db = await this.db();
+    const all = (await db.getAll('incidents')) as Incident[];
+    const toDelete = all.filter(
+      (i) => (i as Incident & { isDemo?: boolean }).isDemo === true,
+    );
+    if (toDelete.length === 0) return;
+    const tx = db.transaction('incidents', 'readwrite');
+    for (const i of toDelete) await tx.store.delete(i.incidentId);
+    await tx.done;
+  }
+
   async getCachedIncidents(): Promise<Incident[]> {
     const db = await this.db();
     return (await db.getAll('incidents')) as Incident[];

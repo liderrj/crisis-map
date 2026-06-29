@@ -1,5 +1,7 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { DeviceIdService } from './device-id.service';
+import { StorageService } from './storage.service';
+import { IncidentCacheService } from './incident-cache.service';
 import { environment } from '../../environments/environment';
 
 const SESSION_FLAG = 'crisismap_demo_active';
@@ -20,14 +22,22 @@ const SESSION_FLAG = 'crisismap_demo_active';
  * session end. Only the `purge-test-incidents.mjs` script or the
  * AWS console can reset it.
  *
- * Note: this service does NOT inject `ApiClientService` to avoid a
- * circular DI graph (ApiClient ↔ DemoMode). It hits the backend
- * directly via fetch + the deviceId from DeviceIdService, which has
- * no forward dependencies on either.
+ * Cache hygiene: when the user exits demo mode we drop every locally
+ * cached demo-flagged incident and every tile cache entry, so the
+ * next reload does not surface demo data through stale storage
+ * (the tile cache was written with `?demo=1` and its etag does not
+ * match the `?demo=0` request the freshly booted page makes).
+ *
+ * DI dependency notes:
+ *   - Does NOT inject `ApiClientService` (would create a cycle).
+ *   - Injects `StorageService` + `IncidentCacheService`, both of
+ *     which have no forward dependency on this service.
  */
 @Injectable({ providedIn: 'root' })
 export class DemoModeService {
   private readonly device = inject(DeviceIdService, { optional: true });
+  private readonly storage = inject(StorageService);
+  private readonly cache = inject(IncidentCacheService);
 
   readonly DEMO_LIMIT = 5;
 
@@ -71,10 +81,31 @@ export class DemoModeService {
     }
   }
 
-  /** Turn demo mode off and refresh the page to re-fetch non-demo data. */
-  deactivate(): void {
+  /**
+   * Turn demo mode off and clear every locally-cached demo artifact.
+   * The page is expected to reload right after — the flag flip
+   * alone is not enough because stale tile + IDB caches would
+   * still serve the user's demo reports until their TTLs expire.
+   */
+  async deactivate(): Promise<void> {
     this.isDemo.set(false);
     try { sessionStorage.removeItem(SESSION_FLAG); } catch { /* ignore */ }
+    await this.clearLocalDemoArtifacts();
+  }
+
+  /**
+   * Best-effort wipe: incidents flagged isDemo in the IDB cache
+   * and the entire bbox-keyed tile cache. Errors are swallowed
+   * because reload will still proceed even if local wipe fails
+   * (worst case is a few stale markers until the next revalidate).
+   */
+  private async clearLocalDemoArtifacts(): Promise<void> {
+    try {
+      await this.storage.clearDemoIncidents();
+    } catch { /* ignore */ }
+    try {
+      await this.cache.clearAllTiles();
+    } catch { /* ignore */ }
   }
 
   /**
@@ -109,4 +140,3 @@ export class DemoModeService {
     this.demoIncidentsCreated.update((n) => n + 1);
   }
 }
-

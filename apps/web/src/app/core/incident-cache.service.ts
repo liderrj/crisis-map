@@ -93,4 +93,21 @@ export class IncidentCacheService {
       return undefined;
     }
   }
+
+  /**
+   * Drop every tile entry from localStorage. Called when leaving demo
+   * mode so the next reload does not serve cached tiles that still
+   * contain the user's demo reports. The page refetches fresh tiles
+   * (filtered to non-demo) on its own after reload.
+   */
+  async clearAllTiles(): Promise<void> {
+    if (typeof localStorage === 'undefined') return;
+    const prefix = STORAGE_KEY_PREFIX;
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) toRemove.push(k);
+    }
+    for (const k of toRemove) localStorage.removeItem(k);
+  }
 }

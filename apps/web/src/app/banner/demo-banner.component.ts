@@ -88,9 +88,11 @@ export class DemoBannerComponent {
 
   readonly title = computed(() => this.i18n.t('demo.banner.title'));
 
-  exit(): void {
-    this.demoMode.deactivate();
-    // Reload so non-demo data is fetched fresh with the cleared flag.
+  async exit(): Promise<void> {
+    // Deactivate clears sessionStorage AND wipes local demo caches
+    // (IDB incidents + tile cache) so the reload doesn't surface
+    // the user's own demo data.
+    await this.demoMode.deactivate();
     if (typeof window !== 'undefined') window.location.reload();
   }
 }
