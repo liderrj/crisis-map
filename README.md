@@ -12,6 +12,14 @@ La visión del proyecto es construir una red distribuida de dispositivos capaces
 
 Desde el punto de vista de ingeniería, CrisisMap fue desarrollado priorizando la **entrega rápida de valor**. Las decisiones de arquitectura y organización del código buscaron mantener una **arquitectura mínima viable**, suficientemente robusta para soportar la evolución del proyecto, pero evitando niveles de abstracción, patrones o complejidad que ralentizaran el desarrollo inicial. Algunas decisiones representan compromisos conscientes entre velocidad de implementación y mantenibilidad a largo plazo, entendiendo que, en un contexto de emergencia, disponer rápidamente de una herramienta funcional genera un impacto mayor que perseguir una arquitectura perfecta desde el primer día. La evolución natural del proyecto contempla incorporar progresivamente procesos de refactorización, paneles de administración, capacidades analíticas y enriquecimiento de datos conforme aumente su adopción y madurez. Este enfoque es consistente con prácticas ágiles que promueven una **Minimum Viable Architecture (MVA)**: una base arquitectónica lo suficientemente sólida para evolucionar sin caer en la sobreingeniería durante las primeras etapas del producto.
 
+## Acceso
+
+La aplicación está publicada y accesible en:
+
+- **https://erqk-crisis-map.netlify.app/** — URL principal
+- También puede referírsele como *ERQK Crisis Map*, *ERQK Mapa de Crisis* o simplemente *CrisisMap*.
+- Código fuente: [github.com/liderrj/crisis-map](https://github.com/liderrj/crisis-map)
+
 ## Highlights
 
 - **Offline-first** — cada reporte, confirmación y foto se escribe primero en IndexedDB y se sincroniza asíncronamente cuando la red regresa. Sin login, sin registro.
