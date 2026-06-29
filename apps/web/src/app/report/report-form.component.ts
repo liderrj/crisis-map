@@ -1,4 +1,4 @@
-import { Component, inject, output, signal, computed, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, inject, output, signal, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DeviceIdService } from '../core/device-id.service';
 import { ImageUploadService } from './image-upload.service';
@@ -161,9 +161,9 @@ export class ReportFormComponent implements AfterViewInit, OnDestroy {
   description = '';
   customType = '';
   typeOpen = signal(false);
-  selectedLabel = computed(() =>
-    this.i18n.t('type.' + this.type) || this.types.find(t => t.type === this.type)?.label || this.type
-  );
+  selectedLabel(): string {
+    return this.i18n.t('type.' + this.type) || this.types.find(t => t.type === this.type)?.label || this.type;
+  }
 
   ngAfterViewInit(): void {
     void this.initMap();
