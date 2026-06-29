@@ -17,7 +17,14 @@
     Service-Worker-Allowed = "/"
 
 [[headers]]
-  for = "/ngsw.json"
+for = "/ngsw.json"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# version.txt: never cache so the version check service always reads
+# the freshest commit hash from the latest deploy.
+[[headers]]
+for = "/version.txt"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 

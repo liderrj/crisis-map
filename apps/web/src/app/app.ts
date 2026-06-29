@@ -18,6 +18,7 @@ import { SeedService } from './core/seed.service';
 import { TilePrefetchService } from './core/tile-prefetch.service';
 import { I18nService } from './core/i18n.service';
 import { DeviceIdService } from './core/device-id.service';
+import { VersionCheckService } from './core/version-check.service';
 import type { FilterState } from './map/incident-layer.service';
 import type { Incident, IncidentCategory, IncidentType } from './shared/constants';
 
@@ -149,6 +150,7 @@ export class App {
   private seed = inject(SeedService);
   private prefetch = inject(TilePrefetchService);
   private device = inject(DeviceIdService);
+  private version = inject(VersionCheckService);
   readonly i18n = inject(I18nService);
 
   readonly filtersState = signal<FilterState>({ categories: new Set<IncidentCategory>(), confirmedOnly: false, types: new Set<IncidentType>() });
@@ -173,6 +175,7 @@ export class App {
       this.showAlias.set(true);
     }
     this.prefetch.prefetchIfNeeded();
+    this.version.start();
   }
 
   onReport(): void {

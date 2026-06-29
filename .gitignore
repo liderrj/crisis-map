@@ -59,3 +59,7 @@ tiles-out/
 .specify/start-ng-serve.ps1
 
 .playwright-mcp/
+
+# Generated at build time by scripts/generate-version.mjs
+apps/web/public/version.txt
+apps/web/src/app/core/build-info.ts
