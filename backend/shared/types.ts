@@ -68,6 +68,19 @@ export interface Incident {
    * Absent / false ⇒ "real" incident visible to everyone.
    */
   isDemo?: boolean;
+  /**
+   * Provenance tag. "citizen" for app users, "partner:<partnerId>" for
+   * external integrations. Absent = legacy citizen incident.
+   */
+  source?: string;
+  /** Set when source starts with "partner:". Identifies the OAuth partner. */
+  partnerId?: string;
+  /** Partner-supplied idempotency key. */
+  externalId?: string;
+  /** Composite PK for the external-id-index GSI: `${partnerId}#${externalId}`. */
+  externalKey?: string;
+  /** Free-form partner-supplied metadata. Echoed back in detail responses. */
+  metadata?: Record<string, string | number | boolean>;
 }
 
 export interface Confirmation {

@@ -1,6 +1,6 @@
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 
-interface GeoBounds {
+export interface GeoBounds {
   minLat: number;
   minLng: number;
   maxLat: number;

@@ -9,6 +9,8 @@ export const TABLES = {
   incidents: process.env.INCIDENTS_TABLE ?? 'Incidents',
   confirmations: process.env.CONFIRMATIONS_TABLE ?? 'Confirmations',
   devices: process.env.DEVICES_TABLE ?? 'Devices',
+  oauthClients: process.env.OAUTH_CLIENTS_TABLE ?? 'OAuthClients',
+  externalActions: process.env.EXTERNAL_ACTIONS_TABLE ?? 'ExternalActions',
 };
 
 export async function getItem<T = Record<string, unknown>>(
