@@ -90,9 +90,10 @@ async function queryIncidents(
 
   // Demo-mode filter: when NOT explicitly requesting demo mode, hide incidents
   // flagged as demo. `attribute_not_exists` catches legacy rows without the field.
-  const demoFilterExpr = includeDemo
-    ? undefined
-    : 'attribute_not_exists(isDemo) OR isDemo = :false';
+  // NOTE: must reference the ExpressionAttributeNames alias (#isDemo) — using the
+  // raw attribute name directly would silently fail DDB validation when isDemo is in
+  // the alias map but not the filter expression.
+  const useDemoFilter = !includeDemo;
 
   const shardMap = groupPrefixesByShard(prefixes);
   const shardEntries = [...shardMap.entries()];
@@ -111,8 +112,9 @@ async function queryIncidents(
           filterParts.push('#s <> :resolved');
           filterParts.push('expiresAt > :now');
         }
-        const demoClause = includeDemo ? undefined : demoFilterExpr;
-        if (demoClause) filterParts.push(demoClause);
+        if (useDemoFilter) {
+          filterParts.push('attribute_not_exists(#isDemo) OR #isDemo = :false');
+        }
         const filterExpr = filterParts.length ? filterParts.join(' AND ') : undefined;
 
         const exprValues: Record<string, unknown> = {
@@ -124,7 +126,7 @@ async function queryIncidents(
           exprValues[':resolved'] = 'resolved';
           exprValues[':now'] = now;
         }
-        if (demoClause) {
+        if (useDemoFilter) {
           exprValues[':false'] = false;
         }
 
@@ -141,7 +143,7 @@ async function queryIncidents(
               '#sv': 'severity',
               '#l': 'location',
               '#d': 'description',
-              ...(demoClause ? { '#isDemo': 'isDemo' } : {}),
+              ...(useDemoFilter ? { '#isDemo': 'isDemo' } : {}),
             },
             ...(Object.keys(exprValues).length ? { ExpressionAttributeValues: exprValues } : {}),
             ProjectionExpression: 'incidentId,#s,#t,#c,#sv,#l,geohash,createdAt,updatedAt,confirmations,negativeVotes,imageCount,expiresAt,creatorAlias,#d,isDemo',
