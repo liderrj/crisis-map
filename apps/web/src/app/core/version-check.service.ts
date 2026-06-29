@@ -131,4 +131,16 @@ export class VersionCheckService {
       /* ignore */
     }
   }
+
+  /**
+   * User-initiated full reload. Wipes the per-session reload guard so
+   * the auto-reload path can still fire later if a new version lands
+   * mid-session, and uses a cache-busting query so the SW serves fresh
+   * index.html / chunks instead of the cached shell.
+   */
+  forceReload(): void {
+    this.markReloaded();
+    if (typeof window === 'undefined') return;
+    window.location.replace(`${window.location.pathname}?t=${Date.now()}${window.location.hash}`);
+  }
 }

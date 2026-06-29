@@ -1,6 +1,7 @@
-import { Component, output, inject, signal } from '@angular/core';
+import { Component, output, inject, signal, DestroyRef } from '@angular/core';
 import { I18nService } from '../core/i18n.service';
 import { DemoModeService } from '../core/demo-mode.service';
+import { VersionCheckService } from '../core/version-check.service';
 import { BUILD_VERSION } from '../core/build-info';
 
 @Component({
@@ -17,6 +18,13 @@ import { BUILD_VERSION } from '../core/build-info';
         <span class="cm-fab-icon">◎</span>
         <span class="cm-fab-label">{{ i18n.t('fab.disasterZone') }}</span>
       </button>
+
+      @if (online()) {
+        <button class="cm-fab cm-fab-refresh" (click)="onRefreshClick()" [attr.aria-label]="i18n.t('fab.refresh')" [attr.title]="i18n.t('fab.refresh')">
+          <span class="cm-fab-icon">↻</span>
+          <span class="cm-fab-label">{{ i18n.t('fab.refresh') }}</span>
+        </button>
+      }
 
       <button class="cm-fab cm-fab-report"
         (click)="onReportClick()"
@@ -140,6 +148,8 @@ import { BUILD_VERSION } from '../core/build-info';
     .cm-fab-report[disabled] { opacity: 0.5; cursor: not-allowed; }
     .cm-fab-report.cm-fab-disabled:hover:not([disabled]) { background: #d32f2f; }
     .cm-fab-locate { background: #1976d2; color: #fff; }
+    .cm-fab-refresh { background: #455a64; color: #fff; }
+    .cm-fab-refresh .cm-fab-icon { font-size: 24px; }
     .cm-fab-disaster { background: #e65100; color: #fff; animation: cm-disaster-pulse 1.6s ease-out infinite; }
     .cm-fab-menu { background: #424242; color: #fff; }
     @keyframes cm-disaster-pulse {
@@ -229,8 +239,22 @@ import { BUILD_VERSION } from '../core/build-info';
 export class MapControlsComponent {
   readonly i18n = inject(I18nService);
   readonly demoMode = inject(DemoModeService);
+  private readonly versionCheck = inject(VersionCheckService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly buildVersion = (BUILD_VERSION as string) === 'dev' ? 'dev' : BUILD_VERSION.slice(0, 7);
   readonly menuOpen = signal(false);
+  readonly online = signal(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  constructor() {
+    if (typeof window === 'undefined') return;
+    const updateOnline = () => this.online.set(navigator.onLine);
+    window.addEventListener('online', updateOnline);
+    window.addEventListener('offline', updateOnline);
+    this.destroyRef.onDestroy(() => {
+      window.removeEventListener('online', updateOnline);
+      window.removeEventListener('offline', updateOnline);
+    });
+  }
 
   /** The Report FAB is locked when demo mode's lifetime quota is hit. */
   reportDisabled(): boolean {
@@ -241,6 +265,11 @@ export class MapControlsComponent {
   onReportClick(): void {
     if (this.reportDisabled()) return;
     this.report.emit();
+  }
+
+  onRefreshClick(): void {
+    if (!this.online()) return;
+    this.versionCheck.forceReload();
   }
 
   readonly report = output<void>();
