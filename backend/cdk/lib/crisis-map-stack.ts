@@ -10,6 +10,7 @@ import { ConfirmationsTable } from './confirmations-table';
 import { DevicesTable } from './devices-table';
 import { OAuthClientsTable } from './oauth-clients-table';
 import { ExternalActionsTable } from './external-actions-table';
+import { RateLimitsTable } from './rate-limits-table';
 import { ImageStorage } from './image-storage';
 import { TileStorage } from './tile-storage';
 import { CrisisMapApi } from './api';
@@ -48,6 +49,7 @@ export class CrisisMapStack extends cdk.Stack {
     const devices = new DevicesTable(this, 'DevicesTable');
     const oauthClients = new OAuthClientsTable(this, 'OAuthClientsTable');
     const externalActions = new ExternalActionsTable(this, 'ExternalActionsTable');
+    const rateLimits = new RateLimitsTable(this, 'RateLimitsTable');
     const images = new ImageStorage(this, 'ImageStorage');
     const tiles = new TileStorage(this, 'TileStorage');
     const api = new CrisisMapApi(this, 'Api');
@@ -101,13 +103,27 @@ export class CrisisMapStack extends cdk.Stack {
       resources: [images.bucket.bucketArn],
     });
 
-    const baseEnv = {
+const baseEnv = {
       INCIDENTS_TABLE: incidents.table.tableName,
       CONFIRMATIONS_TABLE: confirmations.table.tableName,
       DEVICES_TABLE: devices.table.tableName,
       IMAGE_BUCKET: images.bucket.bucketName,
-      IMAGE_CDN_URL: `https://${images.distribution.distributionDomainName}`,
     };
+
+    // Environment shared only by the Confirmations lambda. The rate-limit
+    // table is added to its IAM policy below.
+    const confirmationsEnv: Record<string, string> = {
+      ...baseEnv,
+      RATE_LIMITS_TABLE: rateLimits.table.tableName,
+      JWT_SECRET_PARAM: '/crisismap/partner-api/jwt-signing-secret',
+    };
+
+    // Policy granting UpdateItem on the rate-limits table for the
+    // Confirmations lambda only — other lambdas don't need it.
+    const confirmationsRatePolicy = new iam.PolicyStatement({
+      actions: ['dynamodb:UpdateItem'],
+      resources: [rateLimits.table.tableArn],
+    });
 
     // The JWT secret is NOT in partnerEnv. Instead each partner Lambda
     // gets `grantRead(jwtSecretParam)` and resolves the value at cold
@@ -153,7 +169,34 @@ export class CrisisMapStack extends cdk.Stack {
     const getIncidentsFn = mkLambda('GetIncidents', 'lambdas/incidents/get-incidents.handler', 60);
     const devicesFn = mkLambda('Devices', 'lambdas/devices/handler.handler');
     const createIncidentFn = mkLambda('CreateIncident', 'lambdas/incidents/create-incident.handler');
-    const confirmationsFn = mkLambda('Confirmations', 'lambdas/confirmations/handler.handler');
+    const confirmationsFn = new lambda.Function(this, 'Confirmations', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      architecture: lambda.Architecture.ARM_64,
+      timeout: cdk.Duration.seconds(15),
+      memorySize: 512,
+      handler: 'lambdas/confirmations/handler.handler',
+      code: lambda.Code.fromAsset('../dist'),
+      environment: confirmationsEnv,
+    });
+    confirmationsFn.addToRolePolicy(sharedPolicy);
+    confirmationsFn.addToRolePolicy(confirmationsRatePolicy);
+
+    // Confirmations lambda also derives confirmerHashes from the same
+    // SSM secret the partner JWTs use (see shared/confirmer-hash.ts).
+    // Granting GetParameter on the parameter ARN (not just the name)
+    // lets the lambda cache the value in memory for 5 minutes.
+    const jwtSecretParamArn = cdk.Fn.join('', [
+      'arn:aws:ssm:',
+      this.region,
+      ':',
+      this.account,
+      ':parameter',
+      confirmationsEnv.JWT_SECRET_PARAM ?? '/crisismap/partner-api/jwt-signing-secret',
+    ]);
+    confirmationsFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [jwtSecretParamArn],
+    }));
     const resourcesFn = mkLambda('Resources', 'lambdas/resources/handler.handler');
     const legendFn = mkLambda('Legend', 'lambdas/legend/handler.handler');
     const syncFn = mkLambda('Sync', 'lambdas/sync/handler.handler', 30);

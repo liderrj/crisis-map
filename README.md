@@ -165,6 +165,36 @@ Son URLs públicas, no secretos, y es seguro commitearlas. **Nunca** pongas cred
 
 > **Modelo de seguridad**: CrisisMap no tiene autenticación. Cada request se atribuye a un `deviceId` (UUID v4) generado por el cliente. Cualquier persona puede enviar incidentes y confirmaciones desde cualquier deviceId. Esto es por diseño — identidad sin fricción — y significa que la API es inherentemente pública. Rate limiting (100 req/s por cuenta) y seed-token gating en `/seed` son los únicos controles de acceso.
 
+## Security
+
+Los incidentes en el mapa son una señal de vida en una crisis. La
+API ciudadana de confirmaciones aplica varias capas defensivas para
+que ningún actor malicioso pueda hacer desaparecer incidentes ni
+de-anonimizar a quien reporta:
+
+- **Umbral para ocultar un incidente.** `POST /confirmations` con
+  `action: "no_longer_exists"` requiere **≥3 votos afirmativos**
+  (`confirm` / `improved` / `no_longer_exists`) de **≥2 deviceIds
+  distintos** antes de transicionar el estado a `resolved`. Una sola
+  petición ya no es suficiente.
+- **deviceId nunca se devuelve.** El endpoint público expone
+  `confirmerHash` (12 hex chars) derivado de
+  `sha256(SECRET || incidentId || deviceId)`. El salt por-incidente
+  garantiza que el mismo `deviceId` produzca un hash distinto en cada
+  incidente: imposible correlacionar la actividad de un device
+  cruzando incidentes.
+- **Rate-limit por deviceId.** 5 POST /confirmations por minuto por
+  deviceId (con fallback a IP si falta el header). Excedido devuelve
+  429 con `Retry-After`. La tabla de contadores (`RateLimitsTable`)
+  tiene TTL y falla-abierto si DDB está saturado.
+- **Auditoría estructurada.** `CrisisMapConfirmationsAudit` (Log
+  Group, 30 días de retención) recibe un JSON line por cada evento
+  relevante: rate-limit hit, intento de ocultar por debajo del
+  umbral, resolve exitoso. Admins pueden subscribirse vía metric
+  filters o CloudWatch Insights.
+
+Detalles y changelog completo en `CHANGELOG.md`.
+
 ## Deployment
 
 ### Backend (AWS CDK)

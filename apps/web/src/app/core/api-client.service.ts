@@ -14,7 +14,14 @@ export interface IncidentQuery {
 }
 
 export interface Confirmer {
-  deviceId: string;
+  /**
+   * Per-incident opaque hash of the confirmer's deviceId. Stable for
+   * the same (incidentId, deviceId) pair so Angular can use it as a
+   * track-by key, but unguessable / non-correlatable across
+   * incidents (so an attacker who reads it from one response can't
+   * pin the same voter to another incident).
+   */
+  confirmerHash: string;
   alias: string;
   action: ConfirmationAction;
   createdAt: number;

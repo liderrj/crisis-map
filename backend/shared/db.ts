@@ -11,6 +11,7 @@ export const TABLES = {
   devices: process.env.DEVICES_TABLE ?? 'Devices',
   oauthClients: process.env.OAUTH_CLIENTS_TABLE ?? 'OAuthClients',
   externalActions: process.env.EXTERNAL_ACTIONS_TABLE ?? 'ExternalActions',
+  rateLimits: process.env.RATE_LIMITS_TABLE ?? 'RateLimits',
 };
 
 export async function getItem<T = Record<string, unknown>>(

@@ -6,6 +6,122 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1-security] - 2026-06-30
+
+Security patch: see the v0.2.0 Partner API release for the
+description of the features in this branch. The security fix is
+applied on top of v0.2.0 and supersedes it; deploy v0.2.1-security
+instead of v0.2.0.
+
+### Security
+
+This is a security release in response to a coordinated disclosure
+from the Build4Venezuela team. The findings affect the citizen-facing
+`/confirmations` endpoint and the integrity of incident data on the
+public map.
+
+#### Findings
+
+- **[HIGH] Anyone could hide an incident with a single request.** A
+  `POST /confirmations` with `action: "no_longer_exists"` flipped
+  the incident's status to `resolved` on the first vote, with no
+  threshold. Because `get-incidents` hides `resolved` rows by default,
+  one curl request could make a life-safety incident disappear from
+  the map. The only "identity" required was a `deviceId` UUID that
+  the client can rotate trivially.
+- **[MEDIUM] deviceId was exposed in public responses.** The
+  `GET /confirmations` response included every confirmer's raw
+  `deviceId`. Because the same `deviceId` is the only identity
+  attached to reports and votes, exposing it allowed correlating a
+  device's activity across incidents (de-anonymizing reporters in an
+  anonymity-first app) and spoofing their votes.
+
+#### Fix
+
+- `POST /confirmations` with `no_longer_exists` no longer flips the
+  status on the first vote. The incident is only marked `resolved`
+  when both:
+    - At least **3** affirming votes have accumulated
+      (`confirm`, `improved`, or `no_longer_exists`; `worsened` does
+      not affirm the incident exists), AND
+    - At least **2 distinct deviceIds** have voted (worsened counts
+      toward distinct devices; a single attacker cannot reach the
+      threshold even rotating UUIDs).
+  Below threshold, the response carries `resolved_pending: true` plus
+  a `tally` object so clients can see how close they are. The flip
+  uses an atomic `UpdateCommand` with `ConditionExpression:
+  status = "active"` so concurrent resolves stay idempotent.
+- `GET /confirmations` no longer returns `deviceId`. Each row now
+  carries a `confirmerHash` (12 hex chars) derived from
+  `sha256(SECRET || incidentId || deviceId)`. The per-incident salt
+  means the same deviceId produces a different hash on every
+  incident — no cross-incident correlation possible. The hash is
+  stable within an incident so it still works as a list-key for the
+  UI's `@for` track-by.
+- Rate-limit POST `/confirmations` at **5 requests / minute /
+  deviceId** via a new `RateLimitsTable` (TTL'd). Exceeding the cap
+  returns 429 with a `Retry-After` header. The rate-limiter fails open
+  on DDB outages so a metadata-table failure never breaks the main
+  path.
+- Every noteworthy confirmation event (rate-limit hit, threshold
+  check failed, threshold reached) writes one structured JSON line to
+  a dedicated CloudWatch Log Group `CrisisMapConfirmationsAudit`
+  (30-day retention). Admins can subscribe to it via metric filters
+  or query with CloudWatch Insights.
+- The JWT signing secret in SSM is now reused as the per-incident
+  salt for `confirmerHash`, so rotating it invalidates old hashes
+  but keeps the system as one source of truth.
+
+### Changed
+
+- `backend/lambdas/confirmations/handler.ts` rewritten with the new
+  threshold check, rate-limit call, audit log, and the new response
+  shape (no `deviceId`, with `confirmerHash` and optional
+  `resolved_pending` + `tally`).
+- `apps/web/src/app/core/api-client.service.ts`: `Confirmer.deviceId`
+  → `Confirmer.confirmerHash`.
+- `apps/web/src/app/incident/incident-detail.component.ts`: track-by
+  updated to use `confirmerHash`.
+
+### Added
+
+- `backend/shared/confirmation-threshold.ts`: `shouldResolve()`,
+  `tallyVotes()`, `RESOLVE_THRESHOLD_CONFIRMATIONS = 3`,
+  `RESOLVE_THRESHOLD_DISTINCT_DEVICES = 2`.
+- `backend/shared/confirmer-hash.ts`: `computeConfirmerHash()` and
+  `computeConfirmerHashAsync()` with secret loaded from SSM
+  Parameter Store.
+- `backend/shared/rate-limit.ts`: `checkAndIncrement()` with atomic
+  fixed-window counter and TTL-based garbage collection.
+- `backend/cdk/lib/rate-limits-table.ts`: new DynamoDB table with
+  `expiresAt` TTL.
+- `backend/cdk/lib/confirmations-audit-log.ts`: new CloudWatch Log
+  Group dedicated to confirmation audit events.
+- `backend/tests/shared/confirmation-threshold.test.ts`: 12 unit
+  tests covering the threshold rules (`worsened` does not affirm;
+  distinct-device count includes worsening; three worsening alone
+  do not resolve; etc.).
+- `backend/tests/shared/confirmer-hash.test.ts`: 5 unit tests
+  covering the per-incident salt semantics (deterministic, no
+  cross-incident correlation, secret rotation).
+
+### Notes
+
+- This release is **backward-incompatible** on the response shape of
+  `GET /confirmations` for any caller that was reading `deviceId`.
+  The field is replaced by `confirmerHash`. The citizen PWA was
+  updated in this PR; partners using the API must adapt.
+- Reports of incidents created before this fix that were
+  inadvertently resolved by the vulnerable code path are NOT
+  restored. They are presumed to be a small number; admins can
+  re-resurrect them via the seed tooling if needed.
+- The `RateLimitsTable` follows the project's existing PAY_PER_REQUEST
+  + DESTROY-on-stack-delete pattern. No operational cost beyond the
+  handful of requests per minute per active device.
+- Audit log writes are best-effort: if CloudWatch Logs is
+  unavailable, the failure is recorded in stderr but the request
+  itself still succeeds.
+
 ## [0.2.0] - 2026-06-29 — Partner API v1
 
 ### Added

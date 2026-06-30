@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"const p=require('path');const f=require('fs');const r=require('fs/promises');const root=__dirname;(async()=>{const copyFromRoot=async(name)=>{const candidates=[p.join(root,'node_modules',name),p.join(root,'..','node_modules',name)];for(const c of candidates){if(f.existsSync(c)){const dst=p.join(root,'dist','node_modules',name);await r.cp(c,dst,{recursive:true,force:true});return;}}throw new Error('Cannot find '+name+' in node_modules');};await copyFromRoot('nodemailer');await copyFromRoot('jose');const docsSrc=p.join(root,'docs');const docsDst=p.join(root,'dist','docs');await r.cp(docsSrc,docsDst,{recursive:true,force:true});})()\"",
+    "build": "tsc -p tsconfig.json && node -e \"const p=require('path');const f=require('fs');const r=require('fs/promises');const root=__dirname;(async()=>{const copyFromRoot=async(name)=>{const candidates=[p.join(root,'node_modules',name),p.join(root,'..','node_modules',name)];for(const c of candidates){if(f.existsSync(c)){const dst=p.join(root,'dist','node_modules',name);await r.cp(c,dst,{recursive:true,force:true});return;}}throw new Error('Cannot find '+name+' in node_modules');};await copyFromRoot('nodemailer');await copyFromRoot('jose');const docsSrc=p.join(root,'docs');const docsDst=p.join(root,'dist','docs');await r.cp(docsSrc,docsDst,{recursive:true,force:true});})()",
     "test": "jest",
     "test:watch": "jest --watch"
   },
@@ -37,7 +37,16 @@
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.ts$": ["ts-jest", { "tsconfig": "tsconfig.test.json" }]
-    }
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.test.json",
+          "useESM": false
+        }
+      ]
+    },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(jose)/)"
+    ]
   }
 }

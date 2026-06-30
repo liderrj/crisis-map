@@ -95,7 +95,7 @@ type IncidentInput = Incident & { __pending?: boolean };
             <p class="cm-confirmers-empty">{{ i18n.t('incident.confirmers.empty') }}</p>
           } @else {
             <ul class="cm-confirmer-list">
-              @for (c of (showAllConfirmers() ? confirmers() : confirmers().slice(0, 5)); track c.deviceId) {
+              @for (c of (showAllConfirmers() ? confirmers() : confirmers().slice(0, 5)); track c.confirmerHash) {
                 <li class="cm-confirmer-item">
                   <span class="cm-confirmer-alias">{{ c.alias || '—' }}</span>
                   <span class="cm-confirmer-action">{{ i18n.t('incident.action.' + c.action) }}</span>
