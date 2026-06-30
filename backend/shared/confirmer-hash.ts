@@ -2,18 +2,20 @@ import { createHash } from 'node:crypto';
 
 const HASH_LENGTH = 12; // 48 bits — plenty to distinguish voters in a list.
 
+/**
+ * Production secret path. The cache is process-local; on container
+ * refresh the secret is re-fetched. Rotating the SSM parameter only
+ * invalidates old hashes after the 5-min cache TTL expires, which is
+ * acceptable because rotating the secret just makes the same deviceId
+ * produce a different hash across rotations — no correctness issue.
+ *
+ * CRITICAL: this module-scoped `cachedSecret` is for the production
+ * path ONLY. The test-only path below (getSecretSync) uses a
+ * different module-scoped variable so a test invocation can never
+ * poison the production cache with the deterministic fallback salt.
+ */
 let cachedSecret: Uint8Array | null = null;
 
-/**
- * Resolves the per-process secret used to derive confirmer hashes.
- * Loads from `JWT_SECRET_PARAM` (the same SSM-backed secret the JWT
- * signer uses) on first access, caches the decoded bytes in memory.
- *
- * The cache is process-local; on container refresh the secret is
- * re-fetched. This is fine because the secret only affects the
- * confirmerHash output and rotating it just makes the same deviceId
- * produce a different hash across rotations — no correctness issue.
- */
 async function getSecret(): Promise<Uint8Array> {
   if (cachedSecret) return cachedSecret;
   const paramName = process.env.JWT_SECRET_PARAM ?? '/crisismap/partner-api/jwt-signing-secret';
@@ -29,15 +31,18 @@ async function getSecret(): Promise<Uint8Array> {
 }
 
 /**
- * Synchronous variant for tests / non-Lambda contexts. Uses
- * `process.env.SECRET_SALT` if set; otherwise a deterministic fallback
- * so the helper is callable outside the AWS runtime.
+ * Test-only synchronous secret resolver. Uses a separate cache from
+ * the production path so a test that invokes this function can never
+ * overwrite the production secret. The fallback `SECRET_SALT` env
+ * var is set in test setup; the hardcoded string is a last-resort
+ * guard against an unconfigured test environment.
  */
-function getSecretSync(): Uint8Array {
-  if (cachedSecret) return cachedSecret;
+let testCachedSecret: Uint8Array | null = null;
+function getSecretSyncForTests(): Uint8Array {
+  if (testCachedSecret) return testCachedSecret;
   const raw = process.env.SECRET_SALT ?? 'cm-test-salt-not-for-production-32chars';
-  cachedSecret = new TextEncoder().encode(raw);
-  return cachedSecret;
+  testCachedSecret = new TextEncoder().encode(raw);
+  return testCachedSecret;
 }
 
 /**
@@ -48,14 +53,14 @@ function getSecretSync(): Uint8Array {
  *
  * The per-incident salt means the same deviceId produces a different
  * hash on every incident — an observer who reads the hash from one
- * response cannot correlate the same device across incidents.
+ * response cannot correlate the same voter across incidents.
  *
  * The hash is 12 hex chars (~48 bits), enough to distinguish voters
  * within a single list but not enough to be useful as a stable
  * cross-incident identifier (intentionally).
  */
 export function computeConfirmerHash(incidentId: string, deviceId: string, secret?: Uint8Array): string {
-  const s = secret ?? getSecretSync();
+  const s = secret ?? getSecretSyncForTests();
   const incidentSalt = createHash('sha256').update(s).update(incidentId).digest();
   // Truncate to 8 bytes (64 bits) so the salt-input round is cheaper;
   // collisions across distinct incidents are astronomically unlikely
@@ -73,6 +78,3 @@ export async function computeConfirmerHashAsync(incidentId: string, deviceId: st
   const s = await getSecret();
   return computeConfirmerHash(incidentId, deviceId, s);
 }
-
-// Exposed so the cached secret is reachable from the test suite.
-export const _internal = { getSecretSync };
