@@ -1,6 +1,10 @@
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-import { createHash, randomBytes } from 'node:crypto';
+// Pure helpers live in crypto-helpers so unit tests can import them
+// without dragging jose into the test runtime.
+import { hashSecret as _hashSecret, generateSecret as _generateSecret } from './crypto-helpers.js';
+export const hashSecret = _hashSecret;
+export const generateSecret = _generateSecret;
 
 const ISSUER = 'crisismap';
 const AUDIENCE = 'partner-api-v1';
@@ -79,14 +83,4 @@ export async function verifyPartnerToken(token: string): Promise<PartnerClaims> 
   // jose returns the payload as JWTPayload; we trust the shape because we
   // set these fields ourselves in signPartnerToken().
   return payload as PartnerClaims;
-}
-
-/** SHA-256 hash of a secret, hex-encoded. Used for client_secret storage. */
-export function hashSecret(secret: string): string {
-  return createHash('sha256').update(secret).digest('hex');
-}
-
-/** Cryptographically random secret. 32 bytes -> 64 hex chars. */
-export function generateSecret(byteLength = 32): string {
-  return randomBytes(byteLength).toString('hex');
 }
